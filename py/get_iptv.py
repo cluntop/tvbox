@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 tv_urls = [
     "https://qu.ax/vUBde.txt",
+    "http://bxtv.3a.ink/live.m3u",
     "http://live.nctv.top/x.txt",
     "https://aktv.space/live.m3u",
     "http://tot.totalh.net/tttt.txt",
