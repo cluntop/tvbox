@@ -3507,7 +3507,7 @@ http://a21709.tv.netsite.cc/proxy/562106987/562106987.m3u8$LR•IPV4•72『线�
 #EXTINF:-1 tvg-id="59" tvg-name="重庆卫视" group-title="卫视频道",重庆卫视
 http://220.192.12.20:8003/udp/225.0.4.187:7980?$LR•IPV4•72『线路59』
 #EXTINF:-1 tvg-id="60" tvg-name="重庆卫视" group-title="卫视频道",重庆卫视
-http://p.ytelc.com/videojs.php?id=https://sjlivecdn9.cbg.cn/202508141002/app_2/_definst_/ls_2.stream/chunklist.m3u8$LR•IPV4•72『线路60』
+http://p.ytelc.com/videojs.php?id=https://sjlivecdn9.cbg.cn/202508141203/app_2/_definst_/ls_2.stream/chunklist.m3u8$LR•IPV4•72『线路60』
 #EXTINF:-1 tvg-id="61" tvg-name="重庆卫视" group-title="卫视频道",重庆卫视
 http://39.134.65.75/ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221225618/index.m3u8$LR•IPV4•72『线路61』
 #EXTINF:-1 tvg-id="62" tvg-name="重庆卫视" group-title="卫视频道",重庆卫视
@@ -6729,7 +6729,7 @@ http://111.61.236.247:9081/hls/52/index.m3u8$LR•IPV4•55『线路41』
 #EXTINF:-1 tvg-id="42" tvg-name="西藏卫视" group-title="卫视频道",西藏卫视
 http://a21709.tv.netsite.cc/proxy/1062504144/1062504144.m3u8$LR•IPV4•55『线路42』
 #EXTINF:-1 tvg-id="43" tvg-name="西藏卫视" group-title="卫视频道",西藏卫视
-https://tv.vtibet.cn/live/h701F9MpxzPDyE.m3u8?secret=25853432e8566cb5d45e331301f32531&time=689d52b5$LR•IPV4•55『线路43』
+https://tv.vtibet.cn/live/h701F9MpxzPDyE.m3u8?secret=68cf9a0260cf9db2d057cae1e5bdeba1&time=689d60d0$LR•IPV4•55『线路43』
 #EXTINF:-1 tvg-id="44" tvg-name="西藏卫视" group-title="卫视频道",西藏卫视
 http://39.134.65.72/ottrrs.hl.chinamobile.com/PLTV/88888888/224/3221225638/index.m3u8$LR•IPV4•55『线路44』
 #EXTINF:-1 tvg-id="45" tvg-name="西藏卫视" group-title="卫视频道",西藏卫视
@@ -6755,9 +6755,7 @@ http://[2409:8087:3428:20:500::1009]:6610/PLTV/88888888/224/3221226847/index.m3u
 #EXTINF:-1 tvg-id="55" tvg-name="西藏卫视" group-title="卫视频道",西藏卫视
 http://[2409:8087:8:21::18]:6610/otttv.bj.chinamobile.com/PLTV/88888888/224/3221226527/1.m3u8$LR•IPV6•55『线路55』
 #EXTINF:-1 tvg-id="1" tvg-name="海峡卫视" group-title="卫视频道",海峡卫视
-https://live1-fuyun.fjtv.net/haixiapd/hd/live.m3u8?_upt=45f6cfdc1755150643$LR•IPV4•2『线路1』
-#EXTINF:-1 tvg-id="2" tvg-name="海峡卫视" group-title="卫视频道",海峡卫视
-http://8.138.7.223/tv/fjtv1.php?id=hxws$LR•IPV4•2『线路2』
+http://8.138.7.223/tv/fjtv1.php?id=hxws$LR•IPV4
 #EXTINF:-1 tvg-id="1" tvg-name="兵团卫视" group-title="卫视频道",兵团卫视
 https://liveout.btzx.com.cn/62ds9e/yil08g.m3u8$LR•IPV4•31『线路1』
 #EXTINF:-1 tvg-id="2" tvg-name="兵团卫视" group-title="卫视频道",兵团卫视
