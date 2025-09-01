@@ -1,5 +1,5 @@
 {
-  "spider": "./2GZ4fzur.png;md5;df521baa498b5a193ca5e883680f333e",
+  "spider": "./VveciD1r.png;md5;e1eb1eac49cc02687e5fbf724ab7e867",
   "wallpaper": "http://127.0.0.1:9978/proxy?do=wall",
   "logo": "./lib/ol.txt",
   "sites": [
@@ -367,6 +367,16 @@
       "name": "🍫咖啡┃App",
       "type": 3,
       "api": "csp_KaFeiGuard",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "timeout": 10
+    },
+    {
+      "key": "仓鼠",
+      "name": "🐹仓鼠┃App",
+      "type": 3,
+      "api": "csp_CangShuGuard",
       "searchable": 1,
       "quickSearch": 1,
       "filterable": 1,
