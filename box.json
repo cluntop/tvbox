@@ -58,7 +58,7 @@
 			"name": "老三｜4K",
 			"type": 3,
 			"api": "https://gitee.com/yuyu10588/tt/raw/t/t/drpy2.min.js",
-			"ext": "https://gh.clun.top/raw.githubusercontent.com/ljlfct01/ljlfct01.github.io/refs/heads/main/%E8%85%BE%E4%BA%914k.js"
+			"ext": "https://gh.clun.top/raw.githubusercontent.com/ljlfct01/ljlfct01.github.io/main/%E8%85%BE%E4%BA%914k.js"
 		},
 		{
 			"key": "1",
@@ -229,6 +229,14 @@
 			"ext": "./js/s/狐狸君.json"
 		},
 		{
+			"key": "大白鲨",
+			"name": "大白鲨",
+			"type": 3,
+			"api": "csp_XBPQ",
+			"jar": "./jar/XBPQ.jar",
+			"ext": "./js/s/大白鲨.json"
+		},
+		{
 			"key": "2",
 			"name": "== 2 =="
 		},
@@ -279,11 +287,201 @@
 			"key": "py_jianpian",
 			"name": "荐片(T3)",
 			"type": 3,
-			"api": "./py/py_jianpian.py",
+			"api": "./js/py/plugin/html/新荐片.py",
 			"searchable": 1,
 			"quickSearch": 0,
 			"filterable": 0,
 			"changeable": 0
+		},
+		{
+			"key": "py_光速",
+			"name": "光速(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/光速APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_胖虎",
+			"name": "胖虎(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/胖虎APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_视觉",
+			"name": "视觉(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/视觉APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_哇哇",
+			"name": "哇哇(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/哇哇APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_金牌",
+			"name": "金牌(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/plugin/html/金牌.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_皮皮虾",
+			"name": "皮皮虾(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/皮皮虾APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_APPV2",
+			"name": "APPV2(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/APPV2.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_hitv",
+			"name": "hitv(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/hitvAPP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_kzb",
+			"name": "kzd(T3)",
+			"type": 3,
+			"api": "./js/py/aowuplugin/kzb.py",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0,
+			"changeable": 0
+		},
+		{
+			"key": "py_三号动漫",
+			"name": "三号动漫(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/三号动漫APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_火车太顺",
+			"name": "火车太顺(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/火车太顺APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_剧多短剧",
+			"name": "剧多短剧(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/app/剧多短剧APP.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_红果网页.py",
+			"name": "红果网页(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/plugin/html/红果网页.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_绝对影视",
+			"name": "绝对影视(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/plugin/html/绝对影视.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_嗷呜动漫",
+			"name": "嗷呜动漫(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/plugin/html/嗷呜动漫.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_甜圈短剧",
+			"name": "甜圈短剧(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/plugin/html/甜圈短剧.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "py_jieyingshi",
@@ -339,25 +537,29 @@
 			"key": "py_aigua",
 			"name": "爱瓜TV(T3)",
 			"type": 3,
-			"api": "./py/py_aigua.py",
+			"api": "./js/py/plugin/app/爱瓜TVAPP.py",
 			"searchable": 1,
-			"filterable": 0,
-			"changeable": 0
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "js_youyou",
 			"name": "悠悠视频(T3)",
 			"type": 3,
-			"api": "./js/youyou.js",
+			"api": "./js/py/plugin/app/悠悠APP.py",
 			"searchable": 1,
-			"filterable": 0,
-			"changeable": 0
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "py_国外",
 			"name": "国外剧情(T3)",
 			"type": 3,
-			"api": "https://gh.clun.top/raw.githubusercontent.com/bestpvp/source/refs/heads/main/py/py_guowaiju.py",
+			"api": "./py/py_guowaiju.py",
 			"quickSearch": 1,
 			"searchable": 1,
 			"filterable": 1
@@ -377,7 +579,7 @@
 			"key": "py_猎手",
 			"name": "电影猎手(T3)",
 			"type": 3,
-			"api": "./py/py_电影猎手.py",
+			"api": "./js/py/plugin/app/电影猎手.py",
 			"quickSearch": 1,
 			"searchable": 1,
 			"filterable": 0
@@ -386,10 +588,13 @@
 			"key": "py_美帕",
 			"name": "美帕影视(T3)",
 			"type": 3,
-			"api": "./py/美帕影视.py",
+			"api": "./js/py/plugin/app/美帕APP.py",
+			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 1,
-			"playerType": 2
+			"playerType": 2,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "py_嗨皮",
@@ -413,7 +618,7 @@
 			"key": "py_魔方",
 			"name": "魔方影视(T3)",
 			"type": 3,
-			"api": "./py/魔方影视.py",
+			"api": "./js/py/plugin/app/魔方影视APP.py",
 			"quickSearch": 1,
 			"filterable": 1,
 			"playerType": 2
@@ -422,16 +627,19 @@
 			"key": "py_边缘",
 			"name": "边缘影视(T3)",
 			"type": 3,
-			"api": "./py/边缘影视.py",
+			"api": "./js/py/plugin/app/边缘影视APP.py",
+			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 1,
-			"playerType": 2
+			"playerType": 2,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "py_恋鱼",
 			"name": "恋鱼影视(T3)",
 			"type": 3,
-			"api": "./py/恋鱼影视.py",
+			"api": "./js/py/plugin/app/恋鱼影视APP.py",
 			"quickSearch": 1,
 			"filterable": 1,
 			"playerType": 2
@@ -440,7 +648,7 @@
 			"key": "py_若惜",
 			"name": "若惜影视(T3)",
 			"type": 3,
-			"api": "./py/若惜影视.py",
+			"api": "./js/py/plugin/app/若惜追剧APP.py",
 			"quickSearch": 1,
 			"filterable": 1,
 			"playerType": 2
@@ -458,10 +666,16 @@
 			"key": "py_旺旺",
 			"name": "旺旺影视(T3)",
 			"type": 3,
-			"api": "./py/旺旺影视.py",
+			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 1,
-			"playerType": 2
+			"api": "./js/py/plugin/html/旺旺.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"playerType": 2,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "py_农牧",
@@ -492,6 +706,17 @@
 			"quickSearch": 1,
 			"searchable": 1,
 			"filterable": 1
+		},
+		{
+			"key": "py_随机小姐姐",
+			"name": "随机小姐姐(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/html/随机小姐姐.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "4",
@@ -1307,8 +1532,8 @@
 			"ext": "./js/s/mx.json"
 		},
 		{
-			"key": "MiFunP",
-			"name": "MiFunP｜动漫",
+			"key": "MiFun",
+			"name": "MiFun｜动漫",
 			"type": 3,
 			"api": "./py/MiFunP.py",
 			"quickSearch": 1,
@@ -1364,7 +1589,7 @@
 		{
 			"name": "Mursor",
 			"type": "0",
-			"url": "https://gh.clun.top/raw.githubusercontent.com/Mursor/LIVE/refs/heads/main/iptv.m3u",
+			"url": "https://gh.clun.top/raw.githubusercontent.com/Mursor/LIVE/main/iptv.m3u",
 			"playerType": 2,
 			"timeout": 10,
 			"ua": "okHttp/Mod-1.2.0"
@@ -1372,12 +1597,12 @@
 		{
 			"name": "tv_jp",
 			"type": "0",
-			"url": "https://gh.clun.top/raw.githubusercontent.com/luongz/iptv-jp/refs/heads/main/jp.m3u"
+			"url": "https://gh.clun.top/raw.githubusercontent.com/luongz/iptv-jp/main/jp.m3u"
 		},
 		{
 			"name": "tv_jp_clean",
 			"type": "0",
-			"url": "https://gh.clun.top/raw.githubusercontent.com/luongz/iptv-jp/refs/heads/main/jp_clean.m3u"
+			"url": "https://gh.clun.top/raw.githubusercontent.com/luongz/iptv-jp/main/jp_clean.m3u"
 		},
 		{
 			"name": "平台直播",
@@ -1389,7 +1614,7 @@
 		{
 			"name": "肥羊虎牙一起看",
 			"type": 0,
-			"url": "http://127.0.0.1:9978/proxy?do=live&url=https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/refs/heads/main/huyayqk.m3u",
+			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/huyayqk.m3u",
 			"playerType": 2,
 			"timeout": 10,
 			"ua": "okHttp/Mod-1.2.0"
@@ -1397,7 +1622,7 @@
 		{
 			"name": "肥羊B站直播",
 			"type": 0,
-			"url": "http://127.0.0.1:9978/proxy?do=live&url=https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/refs/heads/main/bililive.m3u",
+			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/bililive.m3u",
 			"playerType": 2,
 			"timeout": 10,
 			"ua": "okHttp/Mod-1.2.0"
@@ -1405,7 +1630,7 @@
 		{
 			"name": "肥羊斗鱼一起看",
 			"type": 0,
-			"url": "http://127.0.0.1:9978/proxy?do=live&url=https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/refs/heads/main/douyuyqk.m3u",
+			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/douyuyqk.m3u",
 			"playerType": 2,
 			"timeout": 10,
 			"ua": "okHttp/Mod-1.2.0"
@@ -1413,7 +1638,7 @@
 		{
 			"name": "肥羊YY轮播",
 			"type": 0,
-			"url": "http://127.0.0.1:9978/proxy?do=live&url=https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/refs/heads/main/yylunbo.m3u",
+			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/yylunbo.m3u",
 			"playerType": 2,
 			"timeout": 10,
 			"ua": "okHttp/Mod-1.2.0"
@@ -1455,7 +1680,7 @@
 		{
 			"name": "mlzlzj",
 			"type": 0,
-			"url": "https://github.com/mlzlzj/TV/blob/main/output/result.m3u"
+			"url": "https://gh.clun.top/raw.githubusercontent.com/mlzlzj/TV/main/output/result.m3u"
 		},
 		{
 			"name": "gambiarras",
@@ -1783,5 +2008,6 @@
 	"disabled_wallpaper": "",
 	"wallpaper": "./img/0.jpg",
 	"logo": "./img/pg.gif",
-	"spider": "./pg.jar"
+	"spider": "./pg.jar",
+  "warningText": "1"
 }

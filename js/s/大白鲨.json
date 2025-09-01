@@ -1,0 +1,15 @@
+{
+  "站名": "大白鲨",
+  "主页url": "https://dabaisha.tv/",
+  "分类url": "https://dabaisha.tv/{cateId}/explore/page-{lang}-area-{area}-by-{by}-class-{class}-year-{year}.html",
+  "数组": "class=\"public-list-exp\"&&</div>",
+  "图片": "src=\"&&\"",
+  "标题": "title=\"&&\"",
+  "副标题": "class=\"public-list-prb hide ft2\">&&<",
+  "链接": "href=\"&&\"",
+  "链接前缀": "https://dabaisha.tv",
+  "线路数组": "class=\"left flex\"&&</div>",
+  "搜索url": "https://dabaisha.tv/search?wd={wd}",
+  "搜索模式": "1",
+  "搜索数组": "class=\"cover\"&&</a>"
+}

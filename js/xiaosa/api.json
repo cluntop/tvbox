@@ -1351,14 +1351,11 @@
             "ext": "https://ij1men.slsw6.com"
         },
         {
-            "key": "修罗影视",
+            "key": "修罗",
             "name": "修罗｜磁力",
+            "api": "csp_Xlys",
             "type": 3,
-            "api": "csp_XBPQ",
-            "searchable": 1,
-            "quickSearch": 1,
-            "filterable": 1,
-            "ext": "./XBPQ/修罗影视.json"
+            "ext": "https://xl01.com.de"
         },
         {
             "key": "七味",

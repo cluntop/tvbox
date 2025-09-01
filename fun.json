@@ -16,8 +16,8 @@
 			"quickSearch": 1
 		},
 		{
-			"key": "av资源",
-			"name": "av资源",
+			"key": "AV资源",
+			"name": "AV资源",
 			"type": 1,
 			"api": "https://api.souavzy.vip/api.php/provide/vod/at/json",
 			"searchable": 1,
@@ -28,7 +28,7 @@
 			"changeable": 1
 		},
 		{
-			"key": "大奶子资源",
+			"key": "大奶子",
 			"name": "大奶子资源",
 			"type": 1,
 			"api": "https://apidanaizi.com/api.php/provide/vod",
@@ -49,73 +49,109 @@
 			"filterable": 1,
 			"api": "csp_XBPQ",
 			"jar": "./lib/XBPQ.jar",
-			"ext": "./js/ss/花都.json"
+			"ext": "./js/py/花都.json"
+		},
+		{
+			"key": "py_Phub",
+			"name": "Pronhub(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./js/py/aowuplugin/xhamster.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
+		},
+		{
+			"key": "py_数逼毛",
+			"name": "py_4K数逼毛(T3)",
+			"type": 3,
+			"api": "./js/py/aowuplugin/py_4K数逼毛.py",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0,
+			"changeable": 0
 		},
 		{
 			"key": "py_51吸瓜",
 			"name": "51吸瓜(T3)",
 			"type": 3,
-			"api": "./py//51吸瓜.py"
+			"api": "./js/py/plugin/adult/51吸瓜.py"
 		},
 		{
 			"key": "py_DSYS",
 			"name": "DSYS(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/DSYS.py"
+			"api": "./js/py/plugin/adult/DSYS.py"
 		},
 		{
 			"key": "py_Miss",
 			"name": "Miss(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/Miss.py"
+			"api": "./js/py/plugin/adult/Miss.py"
 		},
 		{
 			"key": "py_Phb",
 			"name": "Phb(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/Phb.py"
+			"api": "./js/py/plugin/adult/Phb.py"
 		},
 		{
 			"key": "py_Xhm",
 			"name": "Xhm(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/Xhm.py"
+			"api": "./js/py/plugin/adult/Xhm.py"
 		},
 		{
 			"key": "py_Xvd",
 			"name": "Xvd(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/Xvd.py"
+			"api": "./js/py/plugin/adult/Xvd.py"
 		},
 		{
 			"key": "py_lav",
 			"name": "lav(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/lavAPP.py"
+			"api": "./js/py/plugin/adult/lavAPP.py"
 		},
 		{
 			"key": "py_推特",
 			"name": "推特(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/推特APP.py"
+			"api": "./js/py/plugin/adult/推特APP.py"
+		},
+		{
+			"key": "py_小红薯",
+			"name": "小红薯(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/adult/小红薯APP.py"
 		},
 		{
 			"key": "py_浴火社",
 			"name": "浴火社(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/浴火社APP.py"
+			"api": "./js/py/plugin/adult/小浴火社APP.py"
+		},
+		{
+			"key": "py_吃瓜",
+			"name": "吃瓜(T3)",
+			"type": 3,
+			"api": "./js/py/plugin/adult/吃瓜.py"
 		},
 		{
 			"key": "py_花都",
 			"name": "花都(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/花都.py"
+			"api": "./js/py/plugin/adult/花都.py"
 		},
 		{
 			"key": "py_香蕉",
 			"name": "香蕉(T3)",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/JJBJJ/PyramidStore/refs/heads/main/plugin/adult/香蕉.py"
+			"api": "./js/py/plugin/adult/香蕉.py"
 		},
 		{
 			"key": "AIvin",
@@ -148,7 +184,7 @@
 			"timeout": 60,
 			"ext": {
 				"token": "./lib/tokenm.json",
-				"json": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/json/18pan.json",
+				"json": "https://raw.githubusercontent.com/fish2018/lib/main/json/18pan.json",
 				"keywords": "名称,片名,推荐",
 				"channellist": "CosMM18,avpush,ribenseyuge1,cilitu,cctav,ppg1314,avab01,SeseAnime,AVnew,jpccav,PornXOS,CCCTAV",
 				"proxy": "noproxy",
@@ -159,9 +195,23 @@
 			"key": "色播",
 			"name": "色播",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/js/dr_py/js/sebo.js",
+			"api": "https://raw.githubusercontent.com/fish2018/lib/main/js/dr_py/js/sebo.js",
 			"searchable": 1,
 			"changeable": 0
+		},
+		{
+			"key": "py_色播聚合",
+			"name": "py_色播聚合(T3)",
+			"type": 3,
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"api": "./aowuplugin/py_色播聚合.py",
+			"searchable": 1,
+			"quickSearch": 1,
+			"filterable": 1,
+			"order_num": 5,
+			"ext": ""
 		},
 		{
 			"key": "XMVideo",
@@ -183,7 +233,7 @@
 			"changeable": 1,
 			"filterable": 1,
 			"timeout": 120,
-			"ext": "./js/ss/百万.json"
+			"ext": "./js/py/百万.json"
 		},
 		{
 			"key": "pronlulu",
@@ -192,7 +242,7 @@
 			"api": "csp_XBPQ",
 			"timeout": 120,
 			"jar": "./lib/XBPQ.jar",
-			"ext": "./js/ss/pronlulu.json"
+			"ext": "./js/py/pronlulu.json"
 		},
 		{
 			"key": "玩偶",
@@ -244,7 +294,7 @@
 			"key": "lav",
 			"name": "lav",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/py/py_lav.py",
+			"api": "https://raw.githubusercontent.com/fish2018/lib/main/py/py_lav.py",
 			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 0,
@@ -255,7 +305,7 @@
 			"key": "xhm",
 			"name": "xhm",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/py/py_Xhm.py",
+			"api": "https://raw.githubusercontent.com/fish2018/lib/main/py/py_Xhm.py",
 			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 0,
@@ -282,7 +332,7 @@
 			"key": "pornhub",
 			"name": "py_Phb",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/py/py_Phb.py",
+			"api": "https://raw.githubusercontent.com/fish2018/lib/main/py/py_Phb.py",
 			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 0,
@@ -293,7 +343,7 @@
 			"key": "推特",
 			"name": "推特",
 			"type": 3,
-			"api": "https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/py/py_推特.py",
+			"api": "https://raw.githubusercontent.com/fish2018/lib/main/py/py_推特.py",
 			"searchable": 1,
 			"quickSearch": 1,
 			"filterable": 0,
@@ -446,7 +496,7 @@
 			"filterable": 1,
 			"api": "csp_XBPQ",
 			"jar": "./lib/XBPQ.jar",
-			"ext": "./js/ss/kisd.json"
+			"ext": "./js/py/kisd.json"
 		},
 		{
 			"key": "奥斯卡",
@@ -693,7 +743,7 @@
 		{
 			"name": "天美传媒816",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/天美传媒816.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/天美传媒816.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -701,7 +751,7 @@
 		{
 			"name": "果冻传媒816",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/果冻传媒816.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/果冻传媒816.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -709,7 +759,7 @@
 		{
 			"name": "麻豆传媒816",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/麻豆传媒816.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/麻豆传媒816.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -717,7 +767,7 @@
 		{
 			"name": "星空传媒816",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/星空传媒816.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/星空传媒816.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -725,7 +775,7 @@
 		{
 			"name": "精东影业816",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/精东影业816.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/精东影业816.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -733,7 +783,7 @@
 		{
 			"name": "国产传媒",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/国产传媒.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/国产传媒.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -741,7 +791,7 @@
 		{
 			"name": "pron",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/pron.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/pron.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -749,7 +799,7 @@
 		{
 			"name": "几个传媒",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/几个传媒.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/几个传媒.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -757,7 +807,7 @@
 		{
 			"name": "成人传媒",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/成人传媒.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/成人传媒.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -765,7 +815,7 @@
 		{
 			"name": "181818",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/181818.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/181818.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -773,7 +823,7 @@
 		{
 			"name": "live18",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/live18.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/live18.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -781,7 +831,7 @@
 		{
 			"name": "花活",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/花活.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/花活.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -789,7 +839,7 @@
 		{
 			"name": "18资源丰富",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/18资源丰富.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/18资源丰富.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -797,7 +847,7 @@
 		{
 			"name": "至尊",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/至尊.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/至尊.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -805,7 +855,7 @@
 		{
 			"name": "终极",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/终极.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/终极.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -813,7 +863,7 @@
 		{
 			"name": "Jable嗅探",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/Jable嗅探.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/Jable嗅探.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -821,7 +871,7 @@
 		{
 			"name": "vip源",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/vip源.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/vip源.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -829,7 +879,7 @@
 		{
 			"name": "成人",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/维护成人.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/维护成人.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -837,7 +887,7 @@
 		{
 			"name": "18+",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/18+.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/18+.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -845,7 +895,7 @@
 		{
 			"name": "全球",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/全球.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/全球.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -853,7 +903,7 @@
 		{
 			"name": "无敌",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/无敌.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/无敌.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -861,7 +911,7 @@
 		{
 			"name": "经典",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/经典.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/经典.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -869,7 +919,7 @@
 		{
 			"name": "成人电影",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/成人电影.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/成人电影.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -877,7 +927,7 @@
 		{
 			"name": "珍藏",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/珍藏.m3u",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/珍藏.m3u",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -885,7 +935,7 @@
 		{
 			"name": "绝品",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/绝品.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/绝品.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
@@ -893,7 +943,7 @@
 		{
 			"name": "美腿丝袜",
 			"type": 0,
-			"url": "https://slink.ltd/https://raw.githubusercontent.com/fish2018/lib/refs/heads/main/txt/美腿丝袜.txt",
+			"url": "https://raw.githubusercontent.com/fish2018/lib/main/txt/美腿丝袜.txt",
 			"ua": "okhttp/3.15",
 			"epg": "http://127.0.0.1:10079/p/0/proxy/http://epg.112114.xyz/?ch={name}&date={date}",
 			"logo": "http://127.0.0.1:10079/p/0/proxy/https://epg.112114.xyz/logo/{name}.png"
