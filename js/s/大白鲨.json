@@ -2,7 +2,8 @@
   "站名": "大白鲨",
   "主页url": "https://dabaisha.tv/",
   "编码": "UTF-8",
-  "分类url": "https://dabaisha.tv/{cateId}/explore/page-{lang}-area-{area}-by-{by}-class-{class}-year-{year}.html",
+  "分类url": "https://dabaisha.tv/{cateId}/explore/page-{catePg}-area-{area}-by-{by}-class-{class}-year-{year}.html",
+  "分类": "电影$movie#剧集$tv#综艺$variety#动漫$cartoon#短剧$mini-drama",
   "数组": "class=\"public-list-exp\"&&</div>",
   "图片": "https+://dabaisha.tv/upload/+data-src=\"/upload/&&\"",
   "标题": "title=\"&&\"",
@@ -14,7 +15,7 @@
   "播放标题": "\">&&</a>",
   "播放链接": "href=\"&&\"",
   "搜索url": "https://dabaisha.tv/search?wd={wd}",
-  "搜索模式": "2",
+  "搜索模式": "1",
   "搜索数组": "class=\"cover\"&&</a>",
   "搜索图片": "https+://dabaisha.tv/upload/+data-src=\"/upload/&&\""
 }

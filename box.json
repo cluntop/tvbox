@@ -334,9 +334,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/金牌.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
 		},
@@ -424,9 +421,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/红果网页.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
 		},
@@ -438,9 +432,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/绝对影视.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
 		},
@@ -452,9 +443,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/嗷呜动漫.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
 		},
@@ -466,9 +454,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/甜圈短剧.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
 		},
@@ -477,46 +462,6 @@
 			"name": "界影视(T3)",
 			"type": 3,
 			"api": "./py/py_jieyingshi.py",
-			"searchable": 1,
-			"quickSearch": 0,
-			"filterable": 0,
-			"changeable": 0
-		},
-		{
-			"key": "py_UpFuHn",
-			"name": "Hi视频(T4)",
-			"type": 4,
-			"api": "https://py.doube.eu.org/spider?site=UpFuHn",
-			"searchable": 1,
-			"quickSearch": 0,
-			"filterable": 0,
-			"changeable": 0
-		},
-		{
-			"key": "py_OleVod",
-			"name": "欧乐影院(T4)",
-			"type": 4,
-			"api": "https://py.doube.eu.org/spider?site=OleVod",
-			"searchable": 1,
-			"quickSearch": 0,
-			"filterable": 0,
-			"changeable": 0
-		},
-		{
-			"key": "py_Dm84",
-			"name": "动漫巴士(T4)",
-			"type": 4,
-			"api": "https://py.doube.eu.org/spider?site=Dm84",
-			"searchable": 1,
-			"quickSearch": 0,
-			"filterable": 0,
-			"changeable": 0
-		},
-		{
-			"key": "py_BaHaoTV",
-			"name": "八号影院(T4)",
-			"type": 4,
-			"api": "https://py.doube.eu.org/spider?site=BaHaoTV",
 			"searchable": 1,
 			"quickSearch": 0,
 			"filterable": 0,
@@ -659,9 +604,6 @@
 			"quickSearch": 1,
 			"filterable": 1,
 			"api": "./js/py/plugin/html/旺旺.py",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
 			"playerType": 2,
 			"order_num": 5,
 			"ext": ""
@@ -706,6 +648,40 @@
 			"filterable": 1,
 			"order_num": 5,
 			"ext": ""
+		},
+		{
+			"key": "3.1",
+			"name": "== 3.1 =="
+		},
+		{
+			"key": "py_DianYingTanTang",
+			"name": "🫐电影天堂(T4)",
+			"type": 4,
+			"api": "https://py.doube.eu.org/spider?site=DianYingTanTang",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0,
+			"changeable": 0
+		},
+		{
+			"key": "py_OleVod",
+			"name": "欧乐影院(T4)",
+			"type": 4,
+			"api": "https://py.doube.eu.org/spider?site=OleVod",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0,
+			"changeable": 0
+		},
+		{
+			"key": "py_Dm84",
+			"name": "动漫巴士(T4)",
+			"type": 4,
+			"api": "https://py.doube.eu.org/spider?site=Dm84",
+			"searchable": 1,
+			"quickSearch": 0,
+			"filterable": 0,
+			"changeable": 0
 		},
 		{
 			"key": "4",
@@ -1581,7 +1557,7 @@
 			"url": "https://gh.clun.top/raw.githubusercontent.com/Mursor/LIVE/main/iptv.m3u",
 			"playerType": 2,
 			"timeout": 10,
-			"ua": "okHttp/Mod-1.2.0"
+			"ua": "okHttp/Mod-1.2.0.1"
 		},
 		{
 			"name": "tv_jp",
@@ -1606,7 +1582,7 @@
 			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/huyayqk.m3u",
 			"playerType": 2,
 			"timeout": 10,
-			"ua": "okHttp/Mod-1.2.0"
+			"ua": "okHttp/Mod-1.2.0.1"
 		},
 		{
 			"name": "肥羊B站直播",
@@ -1614,7 +1590,7 @@
 			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/bililive.m3u",
 			"playerType": 2,
 			"timeout": 10,
-			"ua": "okHttp/Mod-1.2.0"
+			"ua": "okHttp/Mod-1.2.0.1"
 		},
 		{
 			"name": "肥羊斗鱼一起看",
@@ -1622,7 +1598,7 @@
 			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/douyuyqk.m3u",
 			"playerType": 2,
 			"timeout": 10,
-			"ua": "okHttp/Mod-1.2.0"
+			"ua": "okHttp/Mod-1.2.0.1"
 		},
 		{
 			"name": "肥羊YY轮播",
@@ -1630,7 +1606,7 @@
 			"url": "https://gh.clun.top/raw.githubusercontent.com/mursor1985/LIVE/main/yylunbo.m3u",
 			"playerType": 2,
 			"timeout": 10,
-			"ua": "okHttp/Mod-1.2.0"
+			"ua": "okHttp/Mod-1.2.0.1"
 		},
 		{
 			"name": "YTLive",
