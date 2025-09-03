@@ -200,7 +200,7 @@
 			"key": "三九影视",
 			"name": "三九影视",
 			"type": 3,
-			"api": "csp_HBPQ",
+			"api": "csp_XBPQ",
 			"jar": "./jar/XBPQ.jar",
 			"ext": "./XBPQ/三九影视.json"
 		},
@@ -241,7 +241,7 @@
 			"name": "== 2 =="
 		},
 		{
-			"key": "白嫖1",
+			"key": "白嫖2",
 			"name": "️白嫖影视",
 			"type": 3,
 			"api": "csp_XBPQ",
@@ -252,24 +252,13 @@
 			"ext": "./js/s/白嫖1.json"
 		},
 		{
-			"key": "白嫖2",
-			"name": "️白嫖影视",
-			"type": 3,
-			"api": "csp_XBPQ",
-			"searchable": 1,
-			"quickSearch": 1,
-			"filterable": 1,
-			"jar": "./jar/XBPQ.jar",
-			"ext": "./js/s/白嫖2.json"
-		},
-		{
 			"key": "白嫖3",
 			"name": "白嫖影视",
 			"type": 3,
 			"ua": "okhttp/3.15",
 			"api": "csp_XBPQ",
 			"jar": "./jar/XBPQ.jar",
-			"ext": "./js/s/白嫖3.json"
+			"ext": "./js/s/白嫖2.json"
 		},
 		{
 			"key": "白嫖4",
@@ -277,7 +266,7 @@
 			"type": 3,
 			"api": "csp_XBPQ",
 			"jar": "./jar/XBPQ.jar",
-			"ext": "./js/s/白嫖4.json"
+			"ext": "./js/s/白嫖3.json"
 		},
 		{
 			"key": "3",
@@ -2009,5 +1998,5 @@
 	"wallpaper": "./img/0.jpg",
 	"logo": "./img/pg.gif",
 	"spider": "./pg.jar",
-  "warningText": "1"
+	"warningText": "1"
 }

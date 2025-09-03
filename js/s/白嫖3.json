@@ -1,6 +1,8 @@
 {
- "分类url": "https://www.qyzf88.com/qyvodtype/{cateId}-{area}-{by}-{class}-----{catePg}---{year}.html",
- "分类": "电影$1#电视剧$2#樱花动漫$4#综艺$3",
- "副标题": "class=\"pic-text text-right\"&&</span>",
- "简介": "寒+剧情介绍：&&</p >"
+ "简介": "剧情介绍:+module-item-style video-text\">&&</div>",
+ "数组": "<a&&module-item-pic",
+ "副标题": "module-item-text\">&&</div>",
+ "播放数组": "module-blocklist\">&&</div></div>",
+ "分类url": "https://ys.51baipiao.net/index.php/vod/show/area/{area}/class/{class}/id/{cateId}/page/{catePg}/year/{year}.html",
+ "分类": "电视剧$2#电影$1#动漫$29#综艺$3"
 }
