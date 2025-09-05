@@ -873,6 +873,12 @@
             "api": "csp_MiSou"
         },
         {
+            "key": "派派",
+            "name": "派派｜搜索",
+            "type": 3,
+            "api": "csp_PPQPan"
+        },
+        {
             "key": "短剧大全",
             "name": "短剧｜大全",
             "type": 3,
@@ -883,6 +889,12 @@
             "name": "短剧｜合集",
             "type": 3,
             "api": "csp_DuanjuHJ"
+        },
+        {
+            "key": "短剧鬼鬼",
+            "name": "短剧｜鬼鬼",
+            "type": 3,
+            "api": "csp_DuanjuGG"
         },
         {
             "key": "全盘",
