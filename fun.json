@@ -1,6 +1,35 @@
 {
 	"sites": [
 		{
+			"key":"Jable",
+		    "name":"Jable",
+			"type":3,
+			"api":"csp_Jable",
+			"searchable":1,
+			"filterable":1,
+			"jar":"./spider2.jar"
+		},  
+        {
+			"key":"Hanime",
+			"name":"Hanime",
+			"type":3,
+			"api":"csp_Hanime",
+			"searchable":1,
+			"filterable":1,
+			"jar":"./spider2.jar"
+		}
+        {
+			"key":"csp_xBPQ_Jable",
+			"name":"Jable2",
+			"type":3,"api":
+			"csp_xBPQ",
+			"searchable":1,
+			"quickSearch":1,
+			"filterable":0,
+			"ext":"./Jable.json",
+			"jar":"./spider.jar"
+		}
+		{
 			"key": "精品资源站",
 			"name": "精品资源",
 			"type": 1,
