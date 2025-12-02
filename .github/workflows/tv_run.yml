@@ -28,7 +28,7 @@ jobs:
 
     # 检出项目仓库
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     # 设置 Python 环境
     - name: Set up Python
