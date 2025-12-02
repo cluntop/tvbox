@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout Entire Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ env.DEPLOY_TRIGGER_BRANCH }}
           fetch-depth: 1
