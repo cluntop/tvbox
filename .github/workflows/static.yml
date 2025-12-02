@@ -58,7 +58,7 @@ jobs:
           cname: "clun.top"
 
       - name: Upload Entire Repo as Artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ${{ env.UPLOAD_PATH }}
           retention-days: 1
