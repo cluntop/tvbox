@@ -25,7 +25,7 @@ jobs:
         keep_minimum_runs: 10 # 至少保留 0 次记录
 
     - name: Checkout target repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         repository: cluntop/tvbox
         token: ${{ secrets.GIT_TOKEN }}
