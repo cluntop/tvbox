@@ -52,7 +52,7 @@ jobs:
 
       - name: Sync Upstream Changes
         id: sync
-        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.1
+        uses: aormsby/Fork-Sync-With-Upstream-action@v3.4.2
         with:
           upstream_sync_repo: ${{ env.UPSTREAM_REPO }}
           upstream_sync_branch: ${{ env.UPSTREAM_BRANCH }}
