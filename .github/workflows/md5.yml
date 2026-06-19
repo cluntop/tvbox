@@ -18,7 +18,7 @@ jobs:
     
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0 # 获取完整历史，方便提交
 
