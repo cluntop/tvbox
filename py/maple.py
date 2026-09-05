@@ -44,10 +44,9 @@ except ImportError:
 class Spider(BaseSpider):
     publish_url = "https://www.vip1949.com/"
     default_sites = [
-        "https://www.cd-zj.com",
         "https://www.zzztool.com",
         "https://maihaolian.com",
-        "https://www.gzwlr.com",
+        "https://www.cd-zj.com",
     ]
     base_url = default_sites[0]
     cookie = "verify_success=1"
@@ -58,9 +57,6 @@ class Spider(BaseSpider):
     parse_map = {
         'YYNB': 'https://zzrs.mfdyvip.com',
         'JD4K': 'https://fgsrg.hzqingshan.com',
-        'JD': 'https://fgsrg.hzqingshan.com',
-        'co': 'https://zzrs.mfdyvip.com',
-        'knmb': 'https://zzrs.mfdyvip.com',
     }
 
     # 动态 host 缓存
@@ -130,6 +126,12 @@ class Spider(BaseSpider):
         if isinstance(extend, dict):
             return extend
         s = str(extend).strip()
+        if '%' in s:
+            # 兼容 URL 编码字符串(电报/订阅分享格式)
+            try:
+                s = urllib.parse.unquote(s)
+            except Exception:
+                pass
         try:
             return json.loads(s)
         except Exception:
@@ -480,7 +482,7 @@ class Spider(BaseSpider):
                         tag = el.select_one('.module-card-item-title strong')
                         vod_name = tag.get_text(strip=True) if tag else ''
                     img = el.select_one('.module-item-pic img')
-                    vod_pic = img.get('data-src', '') or (img.get('src', '') if img else '')
+                    vod_pic = self._fix_pic(img.get('data-src', '') or (img.get('src', '') if img else ''))
                     remarks = el.select_one('.module-item-note')
                     vod_remarks = remarks.get_text(strip=True) if remarks else ''
                     vod_year = vod_remarks
@@ -547,7 +549,7 @@ class Spider(BaseSpider):
                 name_el = soup.select_one('.module-info-heading h1')
                 vod_name = name_el.get_text(strip=True) if name_el else ''
                 pic_el = soup.select_one('.module-item-pic img')
-                vod_pic = self._fix_pic(pic_el.get('data-src', '')) if pic_el else ''
+                vod_pic = self._fix_pic(pic_el.get('data-src', '') or pic_el.get('src', '')) if pic_el else ''
                 director = actor = ''
                 for item in soup.select('.module-info-item'):
                     t = item.select_one('.module-info-item-title')
@@ -605,7 +607,10 @@ class Spider(BaseSpider):
                         href = a.get('href', '')
                         m = re.search(r'/play/(.*?)\.html', href)
                         if m:
-                            eps.append(f"{a.get_text(strip=True)}${vid}-{m.group(1)}")
+                            _ep = m.group(1)
+                            if not _ep.startswith(vid + '-'):
+                                _ep = f"{vid}-{_ep}"
+                            eps.append(f"{a.get_text(strip=True)}${_ep}")
                     if eps:
                         play_url.append('#'.join(reversed(eps)))
 
@@ -656,7 +661,8 @@ class Spider(BaseSpider):
                     return {"list": items, "page": page, "pagecount": 1, "limit": 50, "total": len(items)}
 
             # 2) HTML 搜索兜底(cupfox-search, 可能触发验证码)
-            url = f'/cupfox-search/-------------.html?wd={kw}'
+            _search_prefix = 'search' if 'zzztool' in self.base_url else 'cupfox-search'
+            url = f'/{_search_prefix}/-------------.html?wd={kw}'
             html = self._fetch(url)
             if html and '系统安全验证' not in html:
                 items = self._parse_video_list(html, is_search=True)

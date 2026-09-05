@@ -36,7 +36,12 @@
    "quickSearch": 1,
    "filterable": 1,
    "ext": {
-    "host": "https://www.cd-zj.com"
+    "sites": [
+     "https://www.zzztool.com",
+     "https://maihaolian.com",
+     "https://www.cd-zj.com"
+    ],
+    "sitesIndex": 0
    }
   },
   {

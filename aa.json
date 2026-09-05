@@ -102,6 +102,22 @@
    "filterable": 1
   },
   {
+   "key": "youtube_jar",
+   "name": "油管 | Jar",
+   "type": 3,
+   "api": "csp_Youtube",
+   "jar": "./jar/yt_Shawn.jar",
+   "style": {
+    "type": "rect",
+    "ratio": 1.5
+   },
+   "ext": {
+    "json": "./lib/yt2.json",
+    "lang": "zh-CN",
+    "region": "US"
+   }
+  },
+  {
    "key": "油管webjartv",
    "name": "油管网页",
    "type": 3,

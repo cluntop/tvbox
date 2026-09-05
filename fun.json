@@ -110,6 +110,14 @@
    "api": "./js/ss/xp天堂.js"
   },
   {
+   "key": "女优色库",
+   "name": "女优色库[py]",
+   "type": 3,
+   "filterable": 0,
+   "changeable": 0,
+   "api": "./js/ss/女优色库.py"
+  },
+  {
    "key": "Jable",
    "name": "Jable[js]",
    "jar": "./jar/gm.jar",
@@ -1642,16 +1650,6 @@
   }
  ],
  "parses": [
-  {
-   "name": "聚合",
-   "type": 3,
-   "url": "Demo"
-  },
-  {
-   "name": "web",
-   "type": 3,
-   "url": "Web"
-  },
   {
    "name": "souav",
    "type": 1,

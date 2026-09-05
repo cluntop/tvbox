@@ -2,7 +2,8 @@
 import re
 import sys
 import json
-from urllib.parse import quote
+import socket
+from urllib.parse import quote, urlparse
 from lxml import etree
 
 try:
@@ -19,8 +20,25 @@ class Spider(Spider):
 
 	def init(self, extend=""):
 		self.host = "https://www.kkys20.com"
-		self.image_host = "https://vres.cyscyy.com"
+		self.image_host = "https://vres.esadj.com"
 		self.headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36", "Referer": self.host + "/"}
+		self.image_hosts = ["https://vres.esadj.com", "https://103.39.111.180:51050", "https://103.39.111.184:51050", "https://vres.enbymae.com", "https://vres.cyscyy.com"]
+		try:
+			r = self.fetch("https://vf.esadj.com/vod_pc_static_kkdy/js/rdul.js?ver=123456666", headers=self.headers, timeout=10, verify=False)
+			if r is not None and getattr(r, "status_code", 0) == 200 and r.text and "vres." in r.text:
+				hs = re.findall(r'"(https?://[^"]+)"', r.text or "")
+				hs = [h.rstrip("/") for h in hs if "vres." in h or ":51050" in h]
+				if hs:
+					seen, uniq = set(), []
+					for h in self.image_hosts + hs:
+						if h not in seen:
+							seen.add(h)
+							uniq.append(h)
+					self.image_hosts = uniq
+					self.image_host = uniq[0]
+		except Exception:
+			pass
+		self._img_ok = {}
 		self.categories = [
 			{"type_id": "1", "type_name": "电影"},
 			{"type_id": "2", "type_name": "连续剧"},
@@ -77,9 +95,59 @@ class Spider(Spider):
 
 	def _pic(self, u):
 		if not u: return ""
-		if u.startswith("//"): return "https:" + u
-		if u.startswith("/"): return self.image_host + u
-		return u
+		u = str(u).strip()
+		if not u or "logo_placeholder" in u.lower(): return ""
+		if u.startswith("//"): u = "https:" + u
+		if u.startswith("http"):
+			try:
+				host = (urlparse(u).hostname or "").lower()
+				if "vres." in host or ":51050" in u:
+					return self._img(u)
+			except Exception:
+				pass
+			return u
+		if u.startswith("/"):
+			return self._img(self.image_host + u)
+		return self._img(self.image_host + "/" + u.lstrip("/"))
+
+	def _img_ok_host(self, host_url):
+		try:
+			if host_url in self._img_ok:
+				return self._img_ok[host_url]
+			host = urlparse(host_url).hostname or ""
+			if not host:
+				return False
+			try:
+				ips = socket.gethostbyname_ex(host)[2] or []
+			except Exception:
+				self._img_ok[host_url] = True
+				return True
+			if not ips:
+				self._img_ok[host_url] = True
+				return True
+			ok = any(ip and not ip.startswith("127.") for ip in ips)
+			self._img_ok[host_url] = ok
+			return ok
+		except Exception:
+			return True
+
+	def _img(self, url):
+		try:
+			path = urlparse(url).path or ""
+			if not path:
+				return url
+			for h in (getattr(self, "image_hosts", None) or [getattr(self, "image_host", "")]):
+				try:
+					if not h:
+						continue
+					if not self._img_ok_host(h):
+						continue
+					return h.rstrip("/") + path
+				except Exception:
+					continue
+			return url
+		except Exception:
+			return url
 
 	def _html(self, content):
 		# Chaquopy(UCS-4)下 etree.HTML(str) 遇数学字母等增补平面字符会报

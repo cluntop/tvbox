@@ -1,0 +1,17 @@
+package com.github.catvod.spider.merge.u;
+
+/* compiled from: r8-map-id-88b4ee5a47df08811008f50aae82e56df8b70dc6cf3967c4f5ff89d9e4610885 */
+/* loaded from: classes.dex */
+public abstract class x {
+    public static final Class a;
+
+    static {
+        Class<?> cls;
+        try {
+            cls = Class.forName("com.google.protobuf.ExtensionRegistry");
+        } catch (ClassNotFoundException unused) {
+            cls = null;
+        }
+        a = cls;
+    }
+}

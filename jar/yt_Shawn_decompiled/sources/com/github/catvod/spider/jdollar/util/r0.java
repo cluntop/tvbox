@@ -1,0 +1,14 @@
+package com.github.catvod.spider.jdollar.util;
+
+import java.util.function.DoubleConsumer;
+
+/* compiled from: r8-map-id-88b4ee5a47df08811008f50aae82e56df8b70dc6cf3967c4f5ff89d9e4610885 */
+/* loaded from: classes.dex */
+public interface r0 extends a1 {
+    void forEachRemaining(DoubleConsumer doubleConsumer);
+
+    boolean tryAdvance(DoubleConsumer doubleConsumer);
+
+    @Override // com.github.catvod.spider.jdollar.util.a1, com.github.catvod.spider.jdollar.util.Spliterator
+    r0 trySplit();
+}

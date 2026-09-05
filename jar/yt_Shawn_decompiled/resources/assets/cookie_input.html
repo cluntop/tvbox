@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YouTube Cookie 获取</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            font-size: 24px;
+            color: #1a202c;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subtitle {
+            color: #718096;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .method {
+            margin-bottom: 24px;
+            padding: 20px;
+            background: #f7fafc;
+            border-radius: 12px;
+            border: 2px solid #e2e8f0;
+        }
+        .method-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .method-title .badge {
+            background: #48bb78;
+            color: white;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+        .method-desc {
+            font-size: 13px;
+            color: #718096;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        .btn-primary {
+            background: #4299e1;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #3182ce;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(66, 153, 225, 0.4);
+        }
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+        .btn-success:hover {
+            background: #38a169;
+        }
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+            margin-top: 12px;
+        }
+        .btn-secondary:hover {
+            background: #cbd5e0;
+        }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: monospace;
+            resize: vertical;
+            min-height: 100px;
+            margin-bottom: 12px;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #4299e1;
+        }
+        .tips {
+            background: #fef5e7;
+            border-left: 4px solid #f39c12;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #7d6608;
+            margin-top: 16px;
+        }
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #155724;
+            margin-top: 16px;
+            display: none;
+        }
+        .error {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #721c24;
+            margin-top: 16px;
+            display: none;
+        }
+        .hidden {
+            display: none;
+        }
+        #autoMethod {
+            display: block;
+        }
+        #manualMethod {
+            display: none;
+        }
+        .step {
+            margin: 12px 0;
+            padding-left: 24px;
+            position: relative;
+        }
+        .step::before {
+            content: "•";
+            position: absolute;
+            left: 8px;
+            color: #4299e1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🍪 YouTube Cookie 获取</h1>
+        <p class="subtitle">选择以下方式之一获取 YouTube Cookie</p>
+
+        <!-- 方法 1: Via 浏览器获取（推荐） -->
+        <div class="method" id="autoMethod">
+            <div class="method-title">
+                Via 浏览器获取 Cookie
+                <span class="badge">最简单</span>
+            </div>
+            <div class="method-desc">
+                <strong>🌟 Via 浏览器操作步骤：</strong>
+                <div class="step">1. 手动打开 Via 浏览器 App</div>
+                <div class="step">2. 在地址栏输入：<strong>m.youtube.com</strong></div>
+                <div class="step">3. 登录你的 YouTube 账号</div>
+                <div class="step">4. 登录后，点击左上角<strong>盾牌+勾</strong>图标</div>
+                <div class="step">5. 点击【View Cookie】</div>
+                <div class="step">6. 点击【复制】按钮</div>
+                <div class="step">7. 切换到下方【手动粘贴方式】并提交</div>
+            </div>
+            
+            <button class="btn btn-primary" id="btnSwitchManual">前往手动粘贴方式</button>
+            
+            <div class="tips" style="margin-top: 16px; background: #e8f5e9; border-left-color: #4caf50;">
+                <strong>💡 Via 浏览器优势：</strong><br>
+                • 一键查看和复制 Cookie，无需开发者工具<br>
+                • 轻量无广告，速度快<br>
+                • Google Play: 搜索 "Via Browser"
+            </div>
+            
+            <div class="tips" style="margin-top: 12px; background: #fff3cd; border-left-color: #ffc107;">
+                <strong>📱 如果没有 Via 浏览器：</strong><br>
+                可以使用其他浏览器（Chrome/Firefox），需要用开发者工具获取 Cookie（操作较复杂）
+            </div>
+        </div>
+
+        <!-- 方法 2: 手动粘贴 -->
+        <div class="method" id="manualMethod">
+            <div class="method-title">手动粘贴 Cookie</div>
+            <div class="method-desc">
+                <strong>Via 浏览器获取 Cookie（推荐）：</strong><br>
+                <div class="step">1. 在 Via 打开 m.youtube.com 并登录</div>
+                <div class="step">2. 登录后，点击左上角<strong>盾牌+勾</strong>图标 🛡️✓</div>
+                <div class="step">3. 点击【View Cookie】</div>
+                <div class="step">4. 点击【复制】按钮</div>
+                <div class="step">5. 粘贴到下方输入框并提交</div>
+                
+                <br><strong>Chrome/其他浏览器获取 Cookie：</strong><br>
+                <div class="step">1. 在浏览器打开 m.youtube.com 并登录</div>
+                <div class="step">2. 按 F12 打开开发者工具（或长按网址栏选"审查元素"）</div>
+                <div class="step">3. 切换到【控制台/Console】标签</div>
+                <div class="step">4. 输入：<code style="background:#f0f0f0;padding:2px 4px;border-radius:3px;">document.cookie</code> 并回车</div>
+                <div class="step">5. 复制输出的内容（Cookie 字符串）</div>
+                <div class="step">6. 粘贴到下方输入框并提交</div>
+            </div>
+            <textarea id="cookieInput" placeholder="粘贴 Cookie 头，例如：&#10;SAPISID=xxx; __Secure-3PAPISID=xxx; LOGIN_INFO=xxx..."></textarea>
+            <button class="btn btn-primary" id="btnSubmit">提交到电视</button>
+            <button class="btn btn-secondary" id="btnSwitchAuto">返回 Via 浏览器说明</button>
+            
+            <div class="tips" style="margin-top: 16px;">
+                <strong>💡 Via 浏览器下载：</strong><br>
+                Via 是一个轻量、无广告的浏览器，支持直接查看和复制 Cookie<br>
+                Google Play: 搜索 "Via Browser"
+            </div>
+        </div>
+
+        <div class="tips">
+            <strong>💡 提示：</strong><br>
+            • 方法 1 可能只能获取部分 Cookie（非 HttpOnly）<br>
+            • 如果方法 1 失败，请使用方法 2 手动粘贴<br>
+            • 电视端会自动填入接收到的 Cookie
+        </div>
+
+        <div class="success" id="successMsg"></div>
+        <div class="error" id="errorMsg"></div>
+    </div>
+
+    <script>
+        const btnSubmit = document.getElementById('btnSubmit');
+        const btnSwitchManual = document.getElementById('btnSwitchManual');
+        const btnSwitchAuto = document.getElementById('btnSwitchAuto');
+        const autoMethod = document.getElementById('autoMethod');
+        const manualMethod = document.getElementById('manualMethod');
+        const cookieInput = document.getElementById('cookieInput');
+        const successMsg = document.getElementById('successMsg');
+        const errorMsg = document.getElementById('errorMsg');
+
+        // 提交 Cookie
+        btnSubmit.addEventListener('click', async function() {
+            const cookie = cookieInput.value.trim();
+            if (!cookie) {
+                showError('请先粘贴 Cookie 内容');
+                return;
+            }
+
+            // 验证 Cookie 是否包含关键字段
+            if (!cookie.includes('SAPISID') && !cookie.includes('LOGIN_INFO')) {
+                showError('⚠️ Cookie 格式可能不正确，请确保包含 SAPISID 或 LOGIN_INFO 等字段');
+                return;
+            }
+
+            try {
+                btnSubmit.disabled = true;
+                btnSubmit.textContent = '提交中...';
+                
+                const response = await fetch('/submit', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'url=' + encodeURIComponent(cookie)
+                });
+
+                if (response.ok) {
+                    showSuccess('✓ 提交成功！Cookie 已发送到电视端（' + cookie.length + ' 字符）');
+                    cookieInput.value = '';
+                    setTimeout(() => {
+                        showSuccess('✓ 请在电视端点击【关闭】按钮，然后点击【保存】完成登录');
+                    }, 2000);
+                } else {
+                    showError('提交失败，请重试');
+                    btnSubmit.disabled = false;
+                    btnSubmit.textContent = '提交到电视';
+                }
+            } catch (error) {
+                showError('提交失败：' + error.message);
+                btnSubmit.disabled = false;
+                btnSubmit.textContent = '提交到电视';
+            }
+        });
+
+        // 切换页面
+        btnSwitchManual.addEventListener('click', function() {
+            autoMethod.style.display = 'none';
+            manualMethod.style.display = 'block';
+        });
+        
+        btnSwitchAuto.addEventListener('click', function() {
+            manualMethod.style.display = 'none';
+            autoMethod.style.display = 'block';
+        });
+
+        function showSuccess(msg) {
+            successMsg.innerHTML = msg;
+            successMsg.style.display = 'block';
+            errorMsg.style.display = 'none';
+        }
+
+        function showError(msg) {
+            errorMsg.innerHTML = msg;
+            errorMsg.style.display = 'block';
+            successMsg.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

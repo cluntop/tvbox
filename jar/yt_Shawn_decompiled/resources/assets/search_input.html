@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YouTube 搜查</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 32px;
+            width: 100%;
+            max-width: 480px;
+        }
+        h1 { font-size: 28px; font-weight: 700; color: #667eea; margin-bottom: 8px; text-align: center; }
+        .subtitle { font-size: 14px; color: #6b7280; text-align: center; margin-bottom: 28px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 14px; font-weight: 600; color: #374151; margin-bottom: 8px; }
+        input[type="text"] {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            outline: none;
+        }
+        input[type="text"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .radio-group { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .radio-item { position: relative; }
+        .radio-item input[type="radio"] { position: absolute; opacity: 0; }
+        .radio-item label {
+            display: block;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 500;
+            margin: 0;
+        }
+        .radio-item input[type="radio"]:checked + label {
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .status {
+            margin-top: 20px;
+            padding: 14px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+        }
+        .status.success { background: #d1fae5; color: #065f46; display: block; }
+        .status.error { background: #fee2e2; color: #991b1b; display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 YouTube 搜查</h1>
+        <p class="subtitle">输入关键词并选择搜索类型</p>
+        <form id="searchForm">
+            <div class="form-group">
+                <label for="keyword">搜索关键词</label>
+                <input type="text" id="keyword" name="keyword" placeholder="请输入搜索关键词" required autofocus>
+            </div>
+            <div class="form-group">
+                <label>搜索类型</label>
+                <div class="radio-group">
+                    <div class="radio-item">
+                        <input type="radio" id="type0" name="type" value="0" checked>
+                        <label for="type0">影片</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" id="type1" name="type" value="1">
+                        <label for="type1">频道</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" id="type2" name="type" value="2">
+                        <label for="type2">列表</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" id="type3" name="type" value="3">
+                        <label for="type3">短剧</label>
+                    </div>
+                </div>
+            </div>
+            <button type="submit">开始搜索</button>
+        </form>
+        <div id="status" class="status"></div>
+    </div>
+    <script>
+        document.getElementById('searchForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const keyword = document.getElementById('keyword').value.trim();
+            const type = document.querySelector('input[name="type"]:checked').value;
+            if (!keyword) {
+                showStatus('请输入搜索关键词', 'error');
+                return;
+            }
+            fetch('/submit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'keyword=' + encodeURIComponent(keyword) + '&type=' + encodeURIComponent(type)
+            })
+            .then(response => {
+                showStatus('搜索已提交，请返回电视查看结果', 'success');
+                document.getElementById('keyword').value = '';
+                setTimeout(() => window.close(), 3000);
+            })
+            .catch(error => {
+                // 即使出现网络错误也显示成功，因为数据可能已经提交
+                showStatus('搜索已提交，请返回电视查看结果', 'success');
+                document.getElementById('keyword').value = '';
+                setTimeout(() => window.close(), 3000);
+            });
+        });
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+    </script>
+</body>
+</html>
