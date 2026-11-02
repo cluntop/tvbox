@@ -248,16 +248,8 @@ _QUALITY_LINE_NAME_TO_Q = {
 
 
 def _split_episode_token(token: str) -> tuple[str, str]:
-    """把 'hg-episode-v1:<q>:<vid>' 解析为 (清晰度, vid)；兼容旧格式 'hg-episode-v1:<vid>'。
-    壳在 Flag.setEpisodes 中按第一个 '$'（limit 2）切分后传入的 id 即为
-    value 段 'hg-episode-v1:<q>:<vid>'；若老壳或旧数据传入整串
-    '第N集$hg-episode-v1:<q>:<vid>'，此处防御性剥离前缀。"""
+    """把 'hg-episode-v1:<q>:<vid>' 解析为 (清晰度, vid)；兼容旧格式 'hg-episode-v1:<vid>'。"""
     body = str(token or "")
-    # 先剥离 '第N集$' 前缀（老壳/兼容旧数据），再剥离 'hg-episode-v1:' 前缀。
-    if "$" in body:
-        head, _, tail = body.partition("$")
-        if head.startswith("第") and tail:
-            body = tail
     if body.startswith(EPISODE_PREFIX):
         body = body[len(EPISODE_PREFIX):]
     if ":" in body:
@@ -563,15 +555,6 @@ _RANGE_FETCH_ATTEMPTS = 3
 
 _RANGE_FETCH_BACKOFF_SECONDS = 0.8
 
-# multi_video_model/v1/ 在边缘节点压力下偶发返回 `200 +
-# Content-Type: application/json + Content-Length: 0 + 空 body`，非签名
-# 错误亦非设备封禁（固定随机数/自由随机数、同设备/新设备均失败），
-# 而是 IP 级概率性限流，恢复窗口约数分钟。此处在 _video_model 内做
-# 有界退避重试，避免单次空体即导致切集会话不可用。
-_VIDEO_MODEL_ATTEMPTS = 6
-
-_VIDEO_MODEL_BACKOFF_SECONDS = 1.5
-
 class HongguoPluginError(RuntimeError):
     pass
 
@@ -649,11 +632,80 @@ def _media_url(item: Mapping[str, Any]) -> str:
         item.get("url"),
     )
 
+def _looks_like_url(value: str) -> bool:
+    text = str(value or "").strip().lower()
+    return text.startswith("http://") or text.startswith("https://")
+
+def _b64_to_url(value: str) -> str:
+    """main_url/backup_url_1 为纯 base64 包装的直链，并非 spade 密文。"""
+    try:
+        decoded = _b64(value).decode("utf-8", errors="replace").strip()
+    except Exception:
+        return ""
+    return decoded if _looks_like_url(decoded) else ""
+
+def resolve_media_url(item: Mapping[str, Any], key_seed: bytes = b"") -> str:
+    """把 video_list 条目解析为可直接请求的 http(s) 直链。
+
+    上游当前返回 main_url = base64(明文直链)；旧版本可能是 spade 密文，
+    因此保留 spade 解密作为最后回退。
+    """
+    raw = _media_url(item)
+    if not raw:
+        return ""
+    if _looks_like_url(raw):
+        return raw
+    decoded = _b64_to_url(raw)
+    if decoded:
+        return decoded
+    if key_seed:
+        try:
+            spade = _decrypt_spade_url(raw, key_seed)
+        except Exception:
+            return ""
+        if _looks_like_url(spade):
+            return spade
+    return ""
+
 def _spade_value(item: Mapping[str, Any]) -> str:
     encrypt_info = item.get("encrypt_info")
     if not isinstance(encrypt_info, Mapping):
         encrypt_info = {}
     return _first(item.get("spade_a"), encrypt_info.get("spade_a"))
+
+def _model_url_expire(model: Mapping[str, Any], item: Mapping[str, Any] | None = None) -> int:
+    """从 video_model 与所选条目中取上游直链时效（unix 秒，0 表示未知）。
+
+    上游形态不稳定：dict 形态把 url_expire 放在 video_model 顶层，list 形态
+    放在每个 video_meta 里，部分响应外层还有 data.expire_time/data.url_expire。
+    """
+    def _scan(value: Any, depth: int = 0) -> int:
+        if depth > 4 or not isinstance(value, Mapping):
+            return 0
+        for key in ("url_expire", "expire_time", "urlExpire", "expireTime"):
+            raw = value.get(key)
+            if raw is None:
+                continue
+            try:
+                number = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if number > 0:
+                return number
+        for key in ("video_meta", "data", "video_info", "dynamic_video"):
+            nested = value.get(key)
+            if isinstance(nested, Mapping):
+                found = _scan(nested, depth + 1)
+                if found:
+                    return found
+        return 0
+
+    for candidate in (item, model):
+        if isinstance(candidate, Mapping):
+            found = _scan(candidate)
+            if found:
+                return found
+    return 0
 
 def derive_content_key(spade_b64: str) -> bytes:
     raw = _b64(spade_b64)
@@ -873,6 +925,9 @@ _STREAM_HEAD_PROBE = 1 << 16
 _STREAM_TTL_SECONDS = 900
 _STREAM_MAX_SESSIONS = 4
 _STREAM_INFLIGHT_WAIT = 60
+# 上游 CDN 直链通常在 url_expire 前约 2~3 小时有效；到期前留 5 分钟余量
+# 主动判死会话，让下一次请求重新取 video_model 换新链，避免"过一段时间后"502。
+_STREAM_URL_EXPIRE_MARGIN = 300
 _STREAM_STATE: dict[str, Any] = {"port": 0, "server": None, "sessions": {}, "inflight": {}}
 _STREAM_LOCK = threading.RLock()
 
@@ -970,6 +1025,20 @@ def _original_format_near(data: bytearray, entry_pos: int, default: bytes) -> by
         idx = pos + 4
 
 
+def _codec_default_near(data: bytearray, entry_pos: int) -> bytes:
+    """frma 缺失/无效时的兜底编码：按样本条目附近的配置盒判断真实编码。
+
+    HEVC 轨道带 hvcC、AVC 轨道带 avcC。若把 HEVC 误标成 avc1，解码器拿不到
+    正确的初始化数据，就会出现"只有声音、没有画面"。这里按 hvcC/avcC 判定，
+    避免一律回退到 avc1。
+    """
+    blob = bytes(data[entry_pos : min(len(data), entry_pos + 1200)])
+    if b"hvcC" in blob or b"hevC" in blob:
+        return b"hvc1"
+    if b"avcC" in blob:
+        return b"avc1"
+    return b"avc1"
+
 def _restore_cenc_codecs(data: bytearray) -> None:
     """把 encv/enca 还原为 frma 中的真实编码，避免一律改成 hvc1 导致只有声音。"""
     pos = 0
@@ -977,7 +1046,9 @@ def _restore_cenc_codecs(data: bytearray) -> None:
         pos = data.find(b"encv", pos)
         if pos < 0:
             break
-        data[pos : pos + 4] = _original_format_near(data, pos, b"avc1")
+        data[pos : pos + 4] = _original_format_near(
+            data, pos, _codec_default_near(data, pos)
+        )
         pos += 4
     pos = 0
     while True:
@@ -1046,6 +1117,7 @@ class _StreamSession:
         total: int,
         moov_start: int,
         moov: bytes,
+        url_expire: int = 0,
     ) -> None:
         if len(content_key) != 16:
             raise HongguoPluginError("CENC 密钥长度错误")
@@ -1057,10 +1129,17 @@ class _StreamSession:
         self.moov_end = moov_start + len(moov)
         self.samples = _sample_table(moov, moov_start)
         self.offsets = [item[0] for item in self.samples]
+        self.url_expire = int(url_expire or 0)
         self.created = time.time()
 
     def expired(self) -> bool:
-        return time.time() - self.created > _STREAM_TTL_SECONDS
+        if time.time() - self.created > _STREAM_TTL_SECONDS:
+            return True
+        # 上游 CDN 直链带时效（video_model.url_expire），过期后继续 Range 拉流
+        # 会被 CDN 静默拒绝。提前 _STREAM_URL_EXPIRE_MARGIN 秒判死以触发重建。
+        if self.url_expire and time.time() > self.url_expire - _STREAM_URL_EXPIRE_MARGIN:
+            return True
+        return False
 
     def _patch(self, buffer: bytearray, base: int) -> None:
         end = base + len(buffer) - 1
@@ -1110,7 +1189,7 @@ class _StreamSession:
             cursor += len(block)
 
 
-def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "1080") -> "_StreamSession":
+def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "1080", force: bool = False) -> "_StreamSession":
     quality = quality if quality in _QUALITY_LINE_NAME_TO_Q else "1080"
     cache_key = "%s|%s" % (video_id, quality)
     with _STREAM_LOCK:
@@ -1118,17 +1197,11 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
         for key in [key for key, item in sessions.items() if item.expired()]:
             sessions.pop(key, None)
         session = sessions.get(cache_key)
-        # 保留过期会话作为降级回退：上游限流时，陈旧的 moov/URL 仍可用于启动播放。
-        expired_session = None
-        if session is None:
-            for key, item in list(sessions.items()):
-                if key == cache_key:
-                    expired_session = item
-                    break
+        if force and session is not None:
+            sessions.pop(cache_key, None)
+            session = None
     if session is not None:
         return session
-    if expired_session is not None:
-        return expired_session
     # 预热线程与播放器可能同时请求同一集；用 in-flight 事件去重，
     # 避免重复拉 video_model 与 moov（冷启动 3~18s，重复会叠加首字节延迟）。
     with _STREAM_LOCK:
@@ -1147,18 +1220,20 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
     try:
         model = _video_model(video_id, config)
         _, item = _select_quality(_video_list_from_model(model), quality)
-        url = _media_url(item)
+        key_seed = _key_seed_from_model(model)
+        url = resolve_media_url(item, key_seed)
         spade = _spade_value(item)
         if not url or not spade:
             raise HongguoPluginError("播放模型缺少地址或密钥材料")
-        key_seed = _key_seed_from_model(model)
-        if key_seed:
-            try:
-                url = _decrypt_spade_url(url, key_seed)
-            except HongguoPluginError:
-                pass
         total, moov_start, moov = _fetch_moov(url)
-        session = _StreamSession(url, derive_content_key(spade), total, moov_start, moov)
+        session = _StreamSession(
+            url,
+            derive_content_key(spade),
+            total,
+            moov_start,
+            moov,
+            _model_url_expire(model, item),
+        )
         with _STREAM_LOCK:
             sessions = _STREAM_STATE["sessions"]
             while len(sessions) >= _STREAM_MAX_SESSIONS:
@@ -1269,6 +1344,43 @@ class _StreamHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         start, end = requested if requested else (0, session.total - 1)
+        if start >= session.total:
+            start, end = 0, session.total - 1
+        config = {
+            "device_id": params["device_id"],
+            "install_id": params["install_id"],
+        }
+        quality = params["quality"]
+        first_block = None
+        if body:
+            try:
+                for block in session.iter_range(start, end):
+                    first_block = block
+                    break
+            except Exception:
+                # 会话对应的上游直链可能已过期（CDN 静默 403/短包）。强制重建
+                # 一次换新链再取首块，成功则继续；只有重建后仍失败才报 502，
+                # 避免"过一段时间后无法播放"。
+                try:
+                    session = _stream_session(params["vid"], config, quality, force=True)
+                except Exception:
+                    self._fail(502, b"media session expired")
+                    return
+                if requested:
+                    refreshed = _parse_range(raw_range, session.total)
+                    if isinstance(refreshed, tuple):
+                        start, end = refreshed
+                    else:
+                        start, end = 0, session.total - 1
+                else:
+                    start, end = 0, session.total - 1
+                try:
+                    for block in session.iter_range(start, end):
+                        first_block = block
+                        break
+                except Exception:
+                    self._fail(502, b"media re-read failed")
+                    return
         self.send_response(206 if requested else 200)
         self.send_header("Content-Type", "video/mp4")
         self.send_header("Accept-Ranges", "bytes")
@@ -1282,8 +1394,12 @@ class _StreamHandler(BaseHTTPRequestHandler):
         if not body:
             return
         try:
-            for block in session.iter_range(start, end):
-                self.wfile.write(block)
+            if first_block is not None:
+                self.wfile.write(first_block)
+            cursor = start + (len(first_block) if first_block else 0)
+            if cursor <= end:
+                for block in session.iter_range(cursor, end):
+                    self.wfile.write(block)
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
         except Exception:
@@ -3397,8 +3513,11 @@ def _device_config(config: Mapping[str, Any]) -> dict[str, str]:
 def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
     devices = _device_config(config)
     params = {
-        "iid": devices["install_id"],
+        # 线上实测（2026-10 抓包回放）：请求串里带 iid(install_id) 会触发上游
+        # 静默拒绝——HTTP 200 但 Content-Length: 0，签名本身有效。只发
+        # device_id 即可拿到完整 video_model。切勿回加 iid。
         "device_id": devices["device_id"],
+
         "ac": "wifi",
         "channel": "update_64",
         "aid": "8662",
@@ -3459,23 +3578,13 @@ def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
         request_headers,
     )
     body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    last_error: Exception | None = None
-    for attempt in range(_VIDEO_MODEL_ATTEMPTS):
-        try:
-            response = requests.post(
-                signed_url,
-                headers=signed_headers,
-                data=body,
-                timeout=30,
-            )
-            response_data = _json_response(response)
-            break
-        except HongguoPluginError as exc:
-            last_error = exc
-            if attempt + 1 < _VIDEO_MODEL_ATTEMPTS:
-                time.sleep(_VIDEO_MODEL_BACKOFF_SECONDS * (attempt + 1))
-                continue
-            raise
+    response = requests.post(
+        signed_url,
+        headers=signed_headers,
+        data=body,
+        timeout=30,
+    )
+    response_data = _json_response(response)
     data = response_data.get("data") or {}
     if not isinstance(data, Mapping):
         raise HongguoPluginError("video_model 数据为空")
@@ -3533,6 +3642,22 @@ def _quality(value: Any) -> str:
     match = re.search(r"(2160|1440|1080|720|576|540|480|360)", text)
     return match.group(1) if match else "1080"
 
+def _row_codec(item: Mapping[str, Any]) -> str:
+    meta = item.get("video_meta")
+    if not isinstance(meta, Mapping):
+        meta = {}
+    return _text(_first(item.get("codec_type"), meta.get("codec_type"))).lower()
+# 上游 720/540/480/360 档在部分剧集使用 bytevc2（配置盒 bv2C、frma=bvc2，
+# 比特流非标准，解码器只当未知轨），表现为"有声音没画面"。1080 恒为
+# bytevc1（标准 HEVC），可正常播放。选路时跳过不可解码档，避免"只能听"。
+_UNDECODABLE_CODECS = ("bytevc2", "bvc2")
+
+def _codec_playable(item: Mapping[str, Any]) -> bool:
+    codec = _row_codec(item)
+    if not codec:
+        return True
+    return not any(bad in codec for bad in _UNDECODABLE_CODECS)
+
 def _select_quality(video_list: Any, wanted: str = "1080") -> tuple[str, dict[str, Any]]:
     def rows_from(value: Any, hinted_quality: str = "") -> list[tuple[str, dict[str, Any]]]:
         if isinstance(value, list):
@@ -3578,13 +3703,16 @@ def _select_quality(video_list: Any, wanted: str = "1080") -> tuple[str, dict[st
         rows[definition] = item
     if not rows:
         raise HongguoPluginError("播放模型没有清晰度")
+    # 优先在可解码档里选；仅当全部档都不可解码时才回退到原始表（避免空结果）。
+    playable = {k: v for k, v in rows.items() if _codec_playable(v)}
+    pool = playable or rows
     requested = _quality(wanted)
     order = [requested] + [item for item in _QUALITY_ORDER if item != requested]
     for definition in order:
-        if definition in rows:
-            return definition, rows[definition]
-    definition = max(rows, key=lambda item: _int(item))
-    return definition, rows[definition]
+        if definition in pool:
+            return definition, pool[definition]
+    definition = max(pool, key=lambda item: _int(item))
+    return definition, pool[definition]
 
 def _fallback_api_value(value: Any) -> str:
     if isinstance(value, Mapping):
@@ -3810,7 +3938,6 @@ def _search_by_keywords(keywords, page: int) -> dict:
         "total": total or len(out) * pagecount,
         "list": out,
     }
-
 
 def _category_loader(page: int, q: dict) -> dict:
     """分类页带重试；page=1 偶发空列表时多试几次。"""
@@ -4105,31 +4232,15 @@ class Spider(_BaseSpider):
         # 按新 URL 重新请求即超时失败，表现为“第 1 集能放、第 2 集不能放”。
         # 本机流服务支持 206 / Content-Range / Accept-Ranges，首字节约 1s，切集稳定。
         # 会话构建（取 video_model + 拉 moov）在冷启动时约 3~18s，若等到播放器连上来
-        # 才建会话，响应头会被拖延到读超时。这里先同步尝试预热会话（带超时），
-        # 再启动后台线程持续重试，确保播放器连接时会话已就绪。
-        _warm_error = [None]
-
+        # 才建会话，响应头会被拖延到读超时。这里先异步预热会话，让播放器连接时命中缓存。
         def _warm_session():
             try:
                 _stream_session(vid, {
                     "device_id": self.device_id or "",
                     "install_id": self.install_id or "",
                 }, q)
-            except Exception as exc:  # 记录错误，避免静默吞掉导致切集无会话
-                _warm_error[0] = exc
-
-        # 同步尝试预热（最多等待约 10s），让播放器连接时会话已就绪。
-        _warm_thread = threading.Thread(target=_warm_session, daemon=True)
-        _warm_thread.start()
-        _warm_thread.join(timeout=10)
-        if _warm_error[0] is not None:
-            # 后台线程仍在运行，继续重试；此处不阻塞返回，避免拖垮 playerContent 响应。
-            try:
-                import android.util.Log as _Log  # 仅在 Android 壳中可用
-                _Log.e("Hongguo", "warm session failed: %r" % _warm_error[0])
             except Exception:
                 pass
-        # 启动后台持续重试线程（供后续切集复用）
         try:
             threading.Thread(target=_warm_session, daemon=True).start()
         except Exception:
@@ -4260,17 +4371,12 @@ class Spider(_BaseSpider):
                         return [200, "video/mp4", cached]
 
                     _, item = _select_quality(rows, wanted)
-                    url = _media_url(item)
+                    key_seed = _key_seed_from_model(model)
+                    url = resolve_media_url(item, key_seed)
                     spade = _spade_value(item)
                     if not url or not spade:
                         last_err = "missing url/spade q=%s" % wanted
                         continue
-                    try:
-                        key_seed = _key_seed_from_model(model)
-                        if key_seed:
-                            url = _decrypt_spade_url(url, key_seed)
-                    except Exception:
-                        pass
 
                     # 下载超时：纯 AES 环境更短，避免壳端空等后失败
                     dl_timeout = 150 if _aes_is_fast() else 90
@@ -4315,3 +4421,4 @@ class Spider(_BaseSpider):
         except Exception as exc:
             msg = "hg localProxy failed: %s\n%s" % (exc, traceback.format_exc())
             return [500, "text/plain; charset=utf-8", msg.encode("utf-8")]
+
