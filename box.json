@@ -10,6 +10,12 @@
    "filterable": 0
   },
   {
+   "key": "py_yangshipin",
+   "name": "直播[py]",
+   "type": 3,
+   "api": "./py/yangshipin.py"
+  },
+  {
    "key": "py_shortfilm",
    "name": "短剧[py]",
    "type": 3,

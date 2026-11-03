@@ -71,8 +71,12 @@ except ImportError:
 # 只 print 到 stdout, 不写文件. TVBox 一般看不到 stdout, 等于静默.
 
 def _log(msg):
+ # 注意：这里不能直接用 print(flush=True)——daemon 刷新线程在解释器 shutdown
+ # 阶段持有 stdout 缓冲锁时，主线程退出会触发 native crash
+ # (_enter_buffered_busy / segfault，本地 python3 实测复现)。
+ # 改用 os.write(2, ...) 直写 stderr：原子写、不经过 BufferedWriter 缓冲锁。
  try:
-  print('[ysp] ' + msg, flush=True)
+  os.write(2, ('[ysp] %s\n' % msg).encode('utf-8', 'replace'))
  except Exception:
   pass
 
@@ -766,8 +770,8 @@ def _inv_mix_columns(s):
   s[4 * c + 1] = _mul(a0, 9) ^ _mul(a1, 14) ^ _mul(a2, 11) ^ _mul(a3, 13)
   s[4 * c + 2] = _mul(a0, 13) ^ _mul(a1, 9) ^ _mul(a2, 14) ^ _mul(a3, 11)
   s[4 * c + 3] = _mul(a0, 11) ^ _mul(a1, 13) ^ _mul(a2, 9) ^ _mul(a3, 14)
-def aes256_encrypt_block(key: bytes, block: bytes) -> bytes:
- rk = _aes256_key_schedule(key)
+def _aes256_encrypt_block_rk(rk, block: bytes) -> bytes:
+ # rk 为已展开的轮密钥；对同一 key 多次调用时省去重复 key schedule
  s = bytearray(block)
  _add_round_key(s, rk[0])
  for rnd in range(1, 14):
@@ -779,6 +783,8 @@ def aes256_encrypt_block(key: bytes, block: bytes) -> bytes:
  _shift_rows(s)
  _add_round_key(s, rk[14])
  return bytes(s)
+def aes256_encrypt_block(key: bytes, block: bytes) -> bytes:
+ return _aes256_encrypt_block_rk(_aes256_key_schedule(key), block)
 def aes256_decrypt_block(key: bytes, block: bytes) -> bytes:
  rk = _aes256_key_schedule(key)
  s = bytearray(block)
@@ -823,34 +829,38 @@ def _ghash(h: int, aad: bytes, ct: bytes) -> int:
 def _inc32(block: bytes) -> bytes:
  ctr = int.from_bytes(block[12:], 'big')
  return block[:12] + (ctr + 1 & 4294967295).to_bytes(4, 'big')
-def _gctr(key: bytes, icb: bytes, data: bytes) -> bytes:
+def _gctr_rk(rk, icb: bytes, data: bytes) -> bytes:
  out = bytearray()
  cb = icb 
  for i in range(0, len(data), 16):
-  ks = aes256_encrypt_block(key, cb)
+  ks = _aes256_encrypt_block_rk(rk, cb)
   chunk = data[i:i + 16]
   out += bytes((a ^ b for a, b in zip(chunk, ks)))
   cb = _inc32(cb)
  return bytes(out)
+def _gctr(key: bytes, icb: bytes, data: bytes) -> bytes:
+ return _gctr_rk(_aes256_key_schedule(key), icb, data)
 def aes_gcm_encrypt(key: bytes, nonce: bytes, plaintext: bytes, aad: bytes = b'') -> bytes:
  assert len(key) == 32 and len(nonce) == 12 
- h = int.from_bytes(aes256_encrypt_block(key, b'\x00' * 16), 'big')
+ rk = _aes256_key_schedule(key)
+ h = int.from_bytes(_aes256_encrypt_block_rk(rk, b'\x00' * 16), 'big')
  j0 = nonce + b'\x00\x00\x00\x01'
- ct = _gctr(key, _inc32(j0), plaintext)
+ ct = _gctr_rk(rk, _inc32(j0), plaintext)
  s = _ghash(h, aad, ct).to_bytes(16, 'big')
- tag = bytes((a ^ b for a, b in zip(aes256_encrypt_block(key, j0), s)))
+ tag = bytes((a ^ b for a, b in zip(_aes256_encrypt_block_rk(rk, j0), s)))
  return ct + tag 
 def aes_gcm_decrypt(key: bytes, nonce: bytes, ct_and_tag: bytes, aad: bytes = b'') -> bytes:
  if len(ct_and_tag) < 16:
   raise ValueError('AES-GCM payload too short')
  ct, tag = (ct_and_tag[:-16], ct_and_tag[-16:])
- h = int.from_bytes(aes256_encrypt_block(key, b'\x00' * 16), 'big')
+ rk = _aes256_key_schedule(key)
+ h = int.from_bytes(_aes256_encrypt_block_rk(rk, b'\x00' * 16), 'big')
  j0 = nonce + b'\x00\x00\x00\x01'
  s = _ghash(h, aad, ct).to_bytes(16, 'big')
- expect = bytes((a ^ b for a, b in zip(aes256_encrypt_block(key, j0), s)))
+ expect = bytes((a ^ b for a, b in zip(_aes256_encrypt_block_rk(rk, j0), s)))
  if not _hmac.compare_digest(tag, expect):
   raise ValueError('AES-GCM decrypt failed')
- return _gctr(key, _inc32(j0), ct)
+ return _gctr_rk(rk, _inc32(j0), ct)
 def _mgf1_sha256(seed: bytes, length: int) -> bytes:
  out = bytearray()
  counter = 0 
@@ -1121,6 +1131,44 @@ def _root_headers(version):
   'X-Timestamp': str(int(time.time() * 1000)), 'X-Version': version, 'UID': 'ROOT',
   'Referer': 'api.cctv.cn', 'User-Agent': CAST_UA, 'appChannel': 'ROOT',
   'Connection': 'Keep-Alive', 'Accept-Encoding': 'gzip'}
+
+
+# ---- 错误分类（v9.5 移植）：区分「会话核心 400」「控制面 400」「会话失效」「身份可恢复」 ----
+# 会话核心端点真正返回 400 才意味着当前会话不可用；控制面端点（dictionary/cloud_get 等）
+# 的 400 只影响该次旁路上报。另外 CastError 文本会拼接上游响应体前若干字节，
+# 裸子串 ' 400' 可能被响应体内容误命中，故必须带端点上下文限定。
+
+# 出现 400 即视为投屏会话链路本身出问题的端点
+_CAST_SESSION_CORE_ENDPOINTS = ('app/start', 'live/v1/01', 'live/v1/02', 'vdn', 'heartbeat')
+# 控制面端点：400 不必然意味着会话失效
+_CAST_CONTROL_PLANE_ENDPOINTS = (
+ 'app/start', 'dictionary', 'app event', 'page event', 'cloud_get', 'cloud get', 'cloud_register')
+
+
+def _has_http_400(lower):
+ return 'http 400' in lower or 'status=400' in lower
+
+
+def _is_session_core_http_400(lower):
+ return _has_http_400(lower) and any(n in lower for n in _CAST_SESSION_CORE_ENDPOINTS)
+
+
+def _is_control_plane_http_400(lower):
+ return _has_http_400(lower) and any(n in lower for n in _CAST_CONTROL_PLANE_ENDPOINTS)
+
+
+def _is_session_invalidating_error(message):
+ """当前会话已不可用，必须重建会话（rotate）后重试。"""
+ lower = str(message).lower()
+ return ('app/start' in lower or 'decrypt' in lower or 'session_key' in lower
+  or 'missing encrypted session key' in lower or _is_session_core_http_400(lower))
+
+
+def _is_identity_recoverable_error(message):
+ """该错误可通过重建身份/会话恢复（比 session_invalidating 更宽）。"""
+ lower = str(message).lower()
+ return (_is_session_invalidating_error(message) or _is_control_plane_http_400(lower)
+  or 'upstream m3u8 http 400' in lower or 'upstream m3u8 http 401' in lower)
 
 
 # ==== 数据结构 ====
@@ -2561,7 +2609,9 @@ class CastResolver(object):
     entry = self._resolve_once(sess, channel, live_id)
    except CastError as err:
     txt = str(err)
-    if 'HTTP 400' in txt or ' 400' in txt:
+    # 仅当「会话核心端点」确实返回 400 时才轮换设备身份；
+    # 旧实现用裸子串 ' 400'，会被上游响应体里出现的 " 400" 误命中。
+    if _is_session_core_http_400(txt.lower()) or _is_control_plane_http_400(txt.lower()):
      try:
       self.rotate_device_on_400(txt[:120])
      except Exception:
@@ -2602,9 +2652,13 @@ class CastResolver(object):
  @staticmethod
  def _session_invalid(err):
   text = str(err)
-  marks = ('app/start', 'AES-GCM decrypt', 'session_key', 'HTTP 400', 'HTTP 401',
+  marks = ('app/start', 'AES-GCM decrypt', 'session_key', 'HTTP 401',
    'HTTP 403', 'missing videos', 'no usable URL', 'missing appSecret')
-  return any(m in text for m in marks)
+  if any(m in text for m in marks):
+   return True
+  # HTTP 400 走带端点上下文的分类判断（v9.5 移植），
+  # 不再把任意含 '400' 的报文当成会话失效。
+  return _is_session_invalidating_error(text)
 
  def prepare(self, channels=None):
   """取消启动预热(v9.4)：只建单设备池会话，不拉频道。"""
@@ -3040,7 +3094,7 @@ def _cast_refresh(ch):
  return True
 
 
-_PREFETCH_COUNT = 28   # 预取上限：覆盖整个播放窗口(16) + 余量
+_PREFETCH_COUNT = 28  # 预取上限：覆盖整个播放窗口(16) + 余量
 _PREFETCH_DELAY = 0.12  # 预取间隔，避免瞬间打爆 CDN 触发风控
 
 
@@ -3624,7 +3678,7 @@ class Spider(SpiderBase):
    # 外部 m3u8 直链：挂到本代理 type=m3u8 分支，由 _ext_media 展开主表、
    # 把段/密钥 URI 改写为绝对代理地址——否则相对路径(如 ../key、/hls_key/)
    # 会以 127.0.0.1 本地代理为基准解析请求不存在的路由，ExoPlayer 404 断流
-    # position 字段已按需求移除：不再由 spider 覆盖历史进度，恢复行为交回壳端
+   # position 字段已按需求移除：不再由 spider 覆盖历史进度，恢复行为交回壳端
    return {"parse": 0, "playUrl": "",
     "url": self._purl(type="m3u8", url=slug),
     "header": {"User-Agent": UA, "Referer": "https://live.cctv.cn/"},
@@ -3643,9 +3697,9 @@ class Spider(SpiderBase):
    "parse": 0, "playUrl": "",
    # 自有频道入口也带 type=m3u8 标记：壳/日志可识别该流走本代理 m3u8 链路；
    # _localProxyRaw 中 type=m3u8+slug 组合继续走滚动直播播放列表分支
-"url": self._purl(type="m3u8", slug=slug),
-    "header": header,
-   }
+   "url": self._purl(type="m3u8", slug=slug),
+   "header": header,
+  }
 
  # ---------------- 直播源 M3U ----------------
  def liveContent(self, url=""):
