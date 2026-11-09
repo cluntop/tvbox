@@ -50,6 +50,12 @@
    "filterable": 1
   },
   {
+   "key": "py_Everyone",
+   "name": "人人[py]",
+   "type": 3,
+   "api": "./py/yysub.py"
+  },
+  {
    "key": "youtube",
    "name": "YouTube",
    "type": 3,
