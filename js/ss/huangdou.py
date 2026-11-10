@@ -50,7 +50,8 @@ class _AESCBC:
 
 class Spider(BaseSpider):
     def __init__(self):
-        self.host = "https://xqjurgek.top"
+        self.host = "https://lzlukvca.cc"
+        self.backups = ["https://roufquunbu.cc", "https://xqjurgek.top"]
         self.api = self.host + "/api"
         self.name = "黄豆短剧"
         self.platform_key = "7961beb44246e3012ce228d6b5ced05a"
@@ -70,16 +71,28 @@ class Spider(BaseSpider):
             try:
                 cfg = json.loads(extend)
                 self.host = (cfg.get("site") or cfg.get("base_url") or self.host).rstrip("/")
-                self.api = self.host + "/api"
                 self.token = cfg.get("token", self.token)
-                self.headers["Origin"] = self.host
-                self.headers["Referer"] = self.host + "/"
-                self.session.headers.update(self.headers)
             except Exception:
                 None
+        self._apply_host()
+
+    def _apply_host(self):
+        self.api = self.host + "/api"
+        self.headers["Origin"] = self.host
+        self.headers["Referer"] = self.host + "/"
+        self.session.headers.update(self.headers)
 
     def getName(self):
         return self.name
+
+    def _page(self, items, pg, tid=""):
+        """站点返回定长 page_size 且无精确总数: 满页视为有下一页, 空页回退当前页。
+        不臆造 total（接口未提供）。"""
+        page = max(1, self._int(pg, 1))
+        n = len(items)
+        if n == 0:
+            return page, page
+        return page, page + 1 if n >= 18 else page
 
     def homeContent(self, filter):
         data = self._api("/drama/list", {"page": "1", "page_size": "18"})
@@ -89,8 +102,10 @@ class Spider(BaseSpider):
     def categoryContent(self, tid, pg, filter, extend):
         extend = extend or {}
         if tid == "yuandou":
-            data = self._api("/drama/navBlock", {"code": "yuandou", "tab": "recommend", "page": str(pg)})
+            # navBlock 一次返回全部分区块（实测 p1=137 条、p2 起为空），按单页交付
+            data = self._api("/drama/navBlock", {"code": "yuandou", "tab": "recommend", "page": "1"})
             items = self._nav_items(data)
+            return {"page": 1, "pagecount": 1, "limit": len(items) or 18, "list": [self._vod(x) for x in items], "parse": 0, "jx": 0}
         else:
             req = {"page": str(pg), "page_size": "18"}
             if tid and tid not in ("all", "recommend"):
@@ -108,40 +123,77 @@ class Spider(BaseSpider):
                 req["update_status"] = extend.get("update_status")
             data = self._api("/drama/list", req)
             items = self._list(data)
-        return {"page": int(pg), "pagecount": int(pg) if len(items) < 18 else int(pg) + 1, "limit": 18, "total": 99999, "list": [self._vod(x) for x in items], "parse": 0, "jx": 0}
+        page, pagecount = self._page(items, pg, tid)
+        return {"page": page, "pagecount": pagecount, "limit": 18, "list": [self._vod(x) for x in items], "parse": 0, "jx": 0}
 
     def detailContent(self, ids):
-        vid = str(ids[0]).replace("rp_", "")
+        vid = self._sid(ids[0] if ids else "")
         obj = self._api("/drama/detail", {"id": vid})
         data = obj.get("data", obj) if isinstance(obj, dict) else {}
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or not data:
             return {"list": []}
-        data = self._unlock(data)
         vod_id = self._sid(data.get("id") or data.get("drama_id") or vid)
         name = data.get("name") or data.get("title") or data.get("t") or vod_id
         eps = data.get("episodes") if isinstance(data.get("episodes"), list) else []
         count = self._int(data.get("episode_count") or data.get("free_episodes"), len(eps) or 1)
+        free = self._int(data.get("free_episodes"), 0)
+        vip_seqs = set(self._int(x, -1) for x in (data.get("vip_episodes") or []))
         play = []
         if eps:
             for i, ep in enumerate(eps, 1):
+                if not isinstance(ep, dict):
+                    continue
                 seq = ep.get("seq") or ep.get("episode") or ep.get("ep") or i
-                play.append("%s$%s|%s" % (ep.get("name") or ep.get("title") or "第%s集" % seq, vod_id, seq))
-        else:
+                ep_name = ep.get("name") or ep.get("title") or "第%s集" % seq
+                # 站点按集下发放映权限: type=vip / is_buy=false 的集只给 10 秒预览。
+                # 保留真实标记，避免用户在播放器里遇到无提示的截断。
+                if self._int(seq, -1) in vip_seqs or str(ep.get("type") or "") == "vip":
+                    ep_name = "%s·会员" % ep_name
+                elif free and self._int(seq, 0) > free:
+                    ep_name = "%s·会员" % ep_name
+                play.append("%s$%s|%s" % (ep_name, vod_id, seq))
+        if not play:
             play = ["第%s集$%s|%s" % (i, vod_id, i) for i in range(1, count + 1)]
-        vod = {"vod_id": vod_id, "vod_name": name, "vod_pic": self._pic(data), "type_name": data.get("category") or data.get("type") or "", "vod_year": "", "vod_area": "", "vod_remarks": data.get("update_label") or "全%s集" % count, "vod_actor": "", "vod_director": "", "vod_content": data.get("description") or data.get("summary") or name, "vod_play_from": self.name, "vod_play_url": "#".join(play)}
+        remarks = data.get("update_label") or ("全%s集" % count)
+        if free and count and free < count:
+            remarks = "%s（免费%s集）" % (remarks, free)
+        vod = {"vod_id": vod_id, "vod_name": name, "vod_pic": self._pic(data), "type_name": data.get("category") or data.get("type") or "", "vod_year": "", "vod_area": "", "vod_remarks": remarks, "vod_actor": "", "vod_director": "", "vod_content": data.get("description") or data.get("summary") or name, "vod_play_from": self.name, "vod_play_url": "#".join(play)}
         return {"list": [vod], "parse": 0, "jx": 0}
 
     def searchContent(self, key, quick, pg="1"):
         data = self._api("/drama/list", {"page": str(pg), "page_size": "18", "keywords": str(key)})
         items = self._list(data)
-        return {"page": int(pg), "pagecount": int(pg) if len(items) < 18 else int(pg) + 1, "limit": 18, "total": 99999, "list": [self._vod(x) for x in items], "parse": 0, "jx": 0}
+        page, pagecount = self._page(items, pg)
+        return {"page": page, "pagecount": pagecount, "limit": 18, "list": [self._vod(x) for x in items], "parse": 0, "jx": 0}
 
     def playerContent(self, flag, id, vipFlags):
         vid, seq = self._split(id)
-        obj = self._api("/drama/play", {"id": vid, "seq": str(seq)}, True)
+        obj = self._api("/drama/play", {"id": vid, "seq": str(seq)})
         data = obj.get("data", {}) if isinstance(obj, dict) else {}
-        url = data.get("m3u8") or data.get("url") or self._hls(vid, seq)
-        return {"parse": 0, "playUrl": "", "url": url, "jx": 0, "header": {"User-Agent": self.headers["User-Agent"], "Referer": self.host + "/", "Origin": self.host}}
+        if not isinstance(data, dict):
+            data = {}
+        # 站点每次请求实时签发带 exp/sig 的 m3u8；lines 为同一集的多条 CDN 线路
+        urls = []
+        lines = data.get("lines")
+        if isinstance(lines, list):
+            for ln in lines:
+                u = ln.get("url") if isinstance(ln, dict) else None
+                if u and u not in urls:
+                    urls.append(u)
+        for k in ("m3u8", "preview_m3u8"):
+            u = data.get(k)
+            if u and u not in urls:
+                urls.append(u)
+        if not urls:
+            return {"parse": 1, "playUrl": "", "url": "", "jx": 0,
+                    "header": self._play_headers()}
+        # 付费集只下发 10 秒预览（is_preview=true）；无完整片源时仍返回可播地址，
+        # 不伪造完整直链，避免播放器表现为黑屏。
+        return {"parse": 0, "playUrl": "", "url": urls[0], "jx": 0,
+                "header": self._play_headers()}
+
+    def _play_headers(self):
+        return {"User-Agent": self.headers["User-Agent"], "Referer": self.host + "/", "Origin": self.host}
 
     def homeVideoContent(self):
         return {"list": []}
@@ -171,6 +223,15 @@ class Spider(BaseSpider):
     def getDependence(self):
         return []
 
+    def _hosts(self):
+        """可尝试的站点域名: 当前 host 优先, 其后为备份域名。"""
+        out = []
+        for h in [self.host] + list(self.backups):
+            h = str(h or "").rstrip("/")
+            if h and h not in out:
+                out.append(h)
+        return out
+
     def _api(self, path, data=None, silent=False):
         path = "/" + path.lstrip("/")
         rid = str(uuid.uuid4())
@@ -180,14 +241,24 @@ class Spider(BaseSpider):
         body = iv + _AESCBC.encrypt(gzip.compress(raw), key, iv)
         ts = int(time.time())
         sign = hashlib.sha256(("Dart|%s|%s|%s|%s" % (self.session_id, rid, ts, path)).encode("utf-8")).hexdigest() + "-" + str(ts)
-        h = dict(self.headers)
-        h.update({"version": self.version, "deviceType": self.device_type, "time": str(ts), "sign": sign, "requestId": rid, "sessionId": self.session_id, "deviceBrand": "", "deviceModel": "", "systemName": "", "systemVersion": ""})
-        try:
-            r = self.session.post(self.api + path, data=body, headers=h, timeout=20, verify=False)
-            r.raise_for_status()
-            return self._decode(r.content, rid)
-        except Exception:
-            return {}
+        base = dict(self.headers)
+        base.update({"version": self.version, "deviceType": self.device_type, "time": str(ts), "sign": sign, "requestId": rid, "sessionId": self.session_id, "deviceBrand": "", "deviceModel": "", "systemName": "", "systemVersion": ""})
+        for host in self._hosts():
+            h = dict(base)
+            h["Origin"] = host
+            h["Referer"] = host + "/"
+            try:
+                r = self.session.post(host + "/api" + path, data=body, headers=h, timeout=20, verify=False)
+                r.raise_for_status()
+                obj = self._decode(r.content, rid)
+            except Exception:
+                continue
+            if isinstance(obj, dict) and obj.get("status") in ("y", "n"):
+                if host != self.host:
+                    self.host = host
+                    self._apply_host()
+                return obj
+        return {}
 
     def _key(self, rid):
         return hmac.new(self.platform_key.encode("utf-8"), bytes.fromhex(str(rid).replace("-", "")), hashlib.sha256).digest()
@@ -265,27 +336,12 @@ class Spider(BaseSpider):
     def _pic(self, item):
         return item.get("img_y") or item.get("img_x") or item.get("img") or item.get("cover") or item.get("pic") or ""
 
-    def _unlock(self, d):
-        eps = d.get("episodes")
-        if isinstance(eps, list):
-            for ep in eps:
-                if isinstance(ep, dict):
-                    ep["is_buy"] = True
-                    ep["type"] = "free"
-                    ep["price"] = 0
-                    ep["methods"] = []
-        d.update({"pay_type": "free", "money": 0, "episode_price": 0, "points_price": 0, "can_vip_watch": True, "is_buy_whole": True, "vip_episodes": [], "coin_episodes": [], "points_episodes": []})
-        return d
-
     def _sid(self, x):
         return str(x or "").replace("rp_", "")
 
     def _split(self, x):
         p = str(x).split("|", 1)
         return self._sid(p[0]), p[1] if len(p) > 1 and p[1] else "1"
-
-    def _hls(self, vid, seq):
-        return "%s/api/drama/hls/%s/%s/play.m3u8?line=free" % (self.host, self._sid(vid), seq)
 
     def _int(self, x, d=0):
         try:
