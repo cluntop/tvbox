@@ -2,8 +2,8 @@ name: Update m3u
 
 permissions:
   contents: write
-  actions: write
-  pull-requests: write      # 'write' access to pull requests
+  # actions: write
+  # pull-requests: write      # 'write' access to pull requests
 
 on:
   # schedule:
@@ -29,20 +29,16 @@ jobs:
         repository: cluntop/tvbox
         token: ${{ secrets.GIT_TOKEN }}
         fetch-depth: 1
-
-    - name: Delete old workflow runs
-      uses: Mattraks/delete-workflow-runs@v2
-      with:
-        token: ${{ github.token }}
-        repository: ${{ github.repository }}
-        retain_days: 7
-        keep_minimum_runs: 3
+        # sparse-checkout: |
+        #   py/
+        #   .github/requirements.txt
 
     - name: Set up Python
       uses: actions/setup-python@v7
       with:
         python-version: '3.10'
         cache: 'pip'
+        # cache-dependency-path: '.github/requirements.txt'
 
     - name: Install dependencies
       run: |
