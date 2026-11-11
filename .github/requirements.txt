@@ -6,7 +6,7 @@ tqdm==4.66.5
 
 aiohttp>=3.9.0
 
-chardet
+chardet>=5.2,<6
 
-pandas
-requests
+pandas>=2.0
+requests>=2.31
