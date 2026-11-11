@@ -12,38 +12,40 @@ updates:
       # day: "monday"
       timezone: "Asia/Shanghai"
       time: "07:00"
-    pull-request-branch-name:
-      separator: "-"
-      
+ 
     groups:
        all-actions:
          patterns:
            - "*"
 
     open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
       
   - package-ecosystem: "pip" # See documentation for possible values
-    directory: "/" # Location of package manifests
+    directory: "/.github" # Location of package manifests
     schedule:
       interval: "daily"
       # day: "monday"
       timezone: "Asia/Shanghai"
       time: "07:00"
-    pull-request-branch-name:
-      separator: "-"
-    
+
     groups:
-       all-actions:
+       all-pip:
          patterns:
            - "*"
 
     open-pull-requests-limit: 10
-
-    # commit-message:
-      # prefix: "ci"
-      # prefix-development: "ci"
-      # include: "scope"
-
-    # labels:
-      # - "dependencies"
-      # - "documentation"
+    rebase-strategy: "auto"
+    versioning-strategy: "increase"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "python"
