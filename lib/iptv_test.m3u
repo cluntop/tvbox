@@ -218,9 +218,9 @@ http://ali-xwl.cztv.com/live/channel021080Plxw.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="上虞文化" tvg-name="上虞文化" group-title="浙江频道",上虞文化
 http://l.cztvcloud.com/channels/lantian/SXshangyu2/720p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="云和新闻" tvg-name="云和新闻" group-title="浙江频道",云和新闻
-http://l.cztvcloud.com/channels/lantian/SXyunhe1/720p.m3u8?zzhed$LR•IPV4•2『线路1』
+http://l.cztvcloud.com/channels/lantian/SXyunhe1/720p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="云和新闻" tvg-name="云和新闻" group-title="浙江频道",云和新闻
-http://l.cztvcloud.com/channels/lantian/SXyunhe1/720p.m3u8$LR•IPV4•2『线路2』
+http://l.cztvcloud.com/channels/lantian/SXyunhe1/720p.m3u8?zzhed$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="兰溪新闻" tvg-name="兰溪新闻" group-title="浙江频道",兰溪新闻
 http://l.cztvcloud.com/channels/lantian/SXlanxi1/720p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="姚江文化" tvg-name="姚江文化" group-title="浙江频道",姚江文化
@@ -533,6 +533,8 @@ http://r.jdshipin.com/yDoTN$LR•IPV4•6『线路5』
 https://cdn.qd.je/163189/fhhk$LR•IPV4•6『线路6』
 #EXTINF:-1 tvg-id="台视新闻" tvg-name="台视新闻" group-title="港澳台",台视新闻
 http://38.64.72.148/hls/modn/list/4013/chunklist1.m3u8$LR•IPV4
+#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="港澳台",中视
+https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="关于本源" tvg-name="关于本源" group-title="更新时间",关于本源(iptv365.org)
 https://gitlab.com/p2v5/wangtv/-/raw/main/about1080p.mp4$LR•IPV4
 #EXTINF:-1 tvg-id="每日一首" tvg-name="每日一首" group-title="更新时间",(请)(地)每日一首
@@ -1271,8 +1273,6 @@ https://cdn.qd.je/163189/ccm2$LR•IPV4•5『线路4』
 https://cdn.qd.je/163189/jtyh$LR•IPV4•5『线路5』
 #EXTINF:-1 tvg-id="TVB1" tvg-name="TVB1" group-title="港澳台📶",TVB1
 https://cdn.qd.je/163189/tvb1$LR•IPV4
-#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="台湾台📶",中视HD
-https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
 http://37.49.224.5/stream/12/index.m3u8$LR•IPV4•30『线路1』
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
@@ -1946,9 +1946,9 @@ http://88.212.7.14/live/hgtv_hun/index.m3u8$LR•IPV4•65『线路46』
 #EXTINF:-1 tvg-id="纪录" tvg-name="纪录" group-title="优质个源",纪录
 http://38.87.224.19:2220/play/a01p/index.m3u8$LR•IPV4•65『线路47』
 #EXTINF:-1 tvg-id="纪录" tvg-name="纪录" group-title="优质个源",纪录
-https://ali-m-l.cztv.com/channels/lantian/channel012/1080p.m3u8$LR•IPV4•65『线路48』
+https://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8$LR•IPV4•65『线路48』
 #EXTINF:-1 tvg-id="纪录" tvg-name="纪录" group-title="优质个源",纪录
-https://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8$LR•IPV4•65『线路49』
+https://ali-m-l.cztv.com/channels/lantian/channel012/1080p.m3u8$LR•IPV4•65『线路49』
 #EXTINF:-1 tvg-id="纪录" tvg-name="纪录" group-title="优质个源",纪录
 https://rt-doc.rttv.com/dvr/rtdru/rtdru1080.m3u8$LR•IPV4•65『线路50』
 #EXTINF:-1 tvg-id="纪录" tvg-name="纪录" group-title="优质个源",纪录
@@ -2240,27 +2240,27 @@ https://cdn.qd.je/163189/cwjd2$LR•IPV4•3『线路2』
 #EXTINF:-1 tvg-id="重温经典" tvg-name="重温经典" group-title="卫视",重温经典
 https://cdn.qd.je/163189/cwjd$LR•IPV4•3『线路3』
 #EXTINF:-1 tvg-id="浙江新闻" tvg-name="浙江新闻" group-title="浙江",浙江新闻
-https://ali-m-l.cztv.com/channels/lantian/channel007/1080p.m3u8$LR•IPV4•2『线路1』
+http://ali-m-l.cztv.com/channels/lantian/channel007/720p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="浙江新闻" tvg-name="浙江新闻" group-title="浙江",浙江新闻
-http://ali-m-l.cztv.com/channels/lantian/channel007/720p.m3u8$LR•IPV4•2『线路2』
+https://ali-m-l.cztv.com/channels/lantian/channel007/1080p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="浙江国际" tvg-name="浙江国际" group-title="浙江",浙江国际
-https://ali-m-l.cztv.com/channels/lantian/channel010/1080p.m3u8$LR•IPV4•2『线路1』
+http://ali-m-l.cztv.com/channels/lantian/channel010/1080p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="浙江国际" tvg-name="浙江国际" group-title="浙江",浙江国际
-http://ali-m-l.cztv.com/channels/lantian/channel010/1080p.m3u8$LR•IPV4•2『线路2』
+https://ali-m-l.cztv.com/channels/lantian/channel010/1080p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="浙江少儿" tvg-name="浙江少儿" group-title="浙江",浙江少儿
-https://ali-m-l.cztv.com/channels/lantian/channel008/1080p.m3u8$LR•IPV4•2『线路1』
+https://ali-m-l.cztv.com/channels/lantian/channel008/1080p.m3u8?$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="浙江少儿" tvg-name="浙江少儿" group-title="浙江",浙江少儿
-https://ali-m-l.cztv.com/channels/lantian/channel008/1080p.m3u8?$LR•IPV4•2『线路2』
+https://ali-m-l.cztv.com/channels/lantian/channel008/1080p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="浙江教科" tvg-name="浙江教科" group-title="浙江",浙江教科
-https://ali-m-l.cztv.com/channels/lantian/channel004/1080p.m3u8$LR•IPV4•2『线路1』
+http://ali-m-l.cztv.com/channels/lantian/channel004/1080p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="浙江教科" tvg-name="浙江教科" group-title="浙江",浙江教科
-http://ali-m-l.cztv.com/channels/lantian/channel004/1080p.m3u8$LR•IPV4•2『线路2』
+https://ali-m-l.cztv.com/channels/lantian/channel004/1080p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="浙江民生" tvg-name="浙江民生" group-title="浙江",浙江民生
-https://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8$LR•IPV4•3『线路1』
+https://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8?$LR•IPV4•3『线路1』
 #EXTINF:-1 tvg-id="浙江民生" tvg-name="浙江民生" group-title="浙江",浙江民生
-http://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8$LR•IPV4•3『线路2』
+https://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8$LR•IPV4•3『线路2』
 #EXTINF:-1 tvg-id="浙江民生" tvg-name="浙江民生" group-title="浙江",浙江民生
-https://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8?$LR•IPV4•3『线路3』
+http://ali-m-l.cztv.com/channels/lantian/channel006/1080p.m3u8$LR•IPV4•3『线路3』
 #EXTINF:-1 tvg-id="上虞新闻综合" tvg-name="上虞新闻综合" group-title="浙江",上虞新闻综合
 http://l.cztvcloud.com/channels/lantian/SXshangyu1/720p.m3u8?zzhed$LR•IPV4
 #EXTINF:-1 tvg-id="上虞新商都" tvg-name="上虞新商都" group-title="浙江",上虞新商都
@@ -2276,9 +2276,9 @@ http://ali-m-l.cztv.com/channels/lantian/channel009/1080p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="龙泉新闻综合" tvg-name="龙泉新闻综合" group-title="浙江",龙泉新闻综合
 http://l.cztvcloud.com/channels/lantian/SXlongquan1/720p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="萧山生活" tvg-name="萧山生活" group-title="浙江",萧山生活
-http://l.cztvcloud.com/channels/lantian/SXxiaoshan2/720p.m3u8$LR•IPV4•2『线路1』
+https://l.cztvcloud.com/channels/lantian/SXxiaoshan2/720p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="萧山生活" tvg-name="萧山生活" group-title="浙江",萧山生活
-https://l.cztvcloud.com/channels/lantian/SXxiaoshan2/720p.m3u8$LR•IPV4•2『线路2』
+http://l.cztvcloud.com/channels/lantian/SXxiaoshan2/720p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="萧山新闻综合" tvg-name="萧山新闻综合" group-title="浙江",萧山新闻综合
 https://l.cztvcloud.com/channels/lantian/SXxiaoshan1/720p.m3u8$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="萧山新闻综合" tvg-name="萧山新闻综合" group-title="浙江",萧山新闻综合
@@ -2294,9 +2294,9 @@ http://ali-m-l.cztv.com/channels/lantian/channel04/720p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="嘉兴新闻综合" tvg-name="嘉兴新闻综合" group-title="浙江",嘉兴新闻综合
 http://live.zohi.tv/video/s10001-fztv-1/index.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="浙江数码时代" tvg-name="浙江数码时代" group-title="浙江",浙江数码时代
-http://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8$LR•IPV4•2『线路1』
+http://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8?zzhed$LR•IPV4•2『线路1』
 #EXTINF:-1 tvg-id="浙江数码时代" tvg-name="浙江数码时代" group-title="浙江",浙江数码时代
-http://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8?zzhed$LR•IPV4•2『线路2』
+http://ali-m-l.cztv.com/channels/lantian/channel12/720p.m3u8$LR•IPV4•2『线路2』
 #EXTINF:-1 tvg-id="浙江遂昌" tvg-name="浙江遂昌" group-title="浙江",浙江遂昌
 http://l.cztvcloud.com/channels/lantian/SXsuichang1/720p.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="龙游新闻综合" tvg-name="龙游新闻综合" group-title="浙江",龙游新闻综合
@@ -2343,22 +2343,12 @@ http://ali-vl.cztv.com/channels/lantian/channel009/360p.m3u8$LR•IPV4
 http://live.shaoxing.com.cn/video/s10001-sxtv2/index.m3u8?%E5%85%B3%E6%B3%A8%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7[%E6%99%B4%E5%9B%AD]$LR•IPV4
 #EXTINF:-1 tvg-id="绍兴公共" tvg-name="绍兴公共" group-title="浙江",绍兴公共
 http://live.shaoxing.com.cn/video/s10001-sxtv2/index.m3u8$LR•IPV4
-#EXTINF:-1 tvg-id="浙江经济" tvg-name="浙江经济" group-title="浙江",浙江经济
-https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•5『线路1』
-#EXTINF:-1 tvg-id="浙江经济" tvg-name="浙江经济" group-title="浙江",浙江经济
-http://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•5『线路2』
-#EXTINF:-1 tvg-id="浙江经济" tvg-name="浙江经济" group-title="浙江",浙江经济
-http://ali-m-l.cztv.com/channels/lantian/channel03/720p.m3u8$LR•IPV4•5『线路3』
-#EXTINF:-1 tvg-id="浙江经济" tvg-name="浙江经济" group-title="浙江",浙江经济
-http://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8$LR•IPV4•5『线路4』
-#EXTINF:-1 tvg-id="浙江经济" tvg-name="浙江经济" group-title="浙江",浙江经济
-http://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8#https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8#http://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•5『线路5』
 #EXTINF:-1 tvg-id="浙江钱江" tvg-name="浙江钱江" group-title="浙江",浙江钱江
-https://ali-m-l.cztv.com/channels/lantian/channel002/1080p.m3u8$LR•IPV4•3『线路1』
+http://l.cztvcloud.com/channels/lantian/SXyuyao2/720p.m3u8$LR•IPV4•3『线路1』
 #EXTINF:-1 tvg-id="浙江钱江" tvg-name="浙江钱江" group-title="浙江",浙江钱江
-http://l.cztvcloud.com/channels/lantian/SXyuyao2/720p.m3u8$LR•IPV4•3『线路2』
+http://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8$LR•IPV4•3『线路2』
 #EXTINF:-1 tvg-id="浙江钱江" tvg-name="浙江钱江" group-title="浙江",浙江钱江
-http://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8$LR•IPV4•3『线路3』
+https://ali-m-l.cztv.com/channels/lantian/channel002/1080p.m3u8$LR•IPV4•3『线路3』
 #EXTINF:-1 tvg-id="广州竞赛" tvg-name="广州竞赛" group-title="广东",广州竞赛
 http://8.138.7.223/tv/gzjs.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="东莞新闻综合" tvg-name="东莞新闻综合" group-title="广东",东莞新闻综合
