@@ -1,3 +1,6 @@
+# maple.py
+# 语言：Python　共 1157 行
+# 说明：由「自动添加注释」根据代码逻辑生成（本地静态分析，无网络）
 # -*- coding: utf-8 -*-
 """
 枫叶影院 / 枫叶4K 合并版 (maple.py)
@@ -29,25 +32,42 @@ from bs4 import BeautifulSoup
 try:
     from base.spider import Spider as BaseSpider
 except ImportError:
+    # 返回结果
     class BaseSpider(object):
+        # 返回处理结果
         def getName(self): return ''
+        # 定义方法 init
         def init(self, extend=''): pass
+        # 返回处理结果
         def homeContent(self, filter=False): return {"class": [], "list": [], "filters": {}}
+        # 返回处理结果
         def homeVideoContent(self): return {"list": []}
+        # 返回错误「def categoryContent(self, tid, p…」
         def categoryContent(self, tid, pg, filter=False, extend=''): return {"list": []}
+        # 返回处理结果
         def detailContent(self, ids): return {"list": []}
+        # 返回处理结果
         def searchContent(self, key, quick, pg='1'): return {"list": []}
+        # 返回处理结果
         def playerContent(self, flag, id, vipFlags=None): return {"parse": 0, "url": ""}
+        # 返回处理结果
         def localProxy(self, param=''): return {}
+        # 返回处理结果
         def isVideoFormat(self, url): return False
+        # 返回处理结果
         def manualVideoCheck(self): return False
+        # 定义方法 destroy
         def destroy(self): pass
 
 
+# 解析 JSON/YAML 数据，遍历每一项，在判空时执行处理、在startswith('http'无效时执行处理、若status_code等于200则提前返回、在attempt + 1小于retries时执行处理、若text无效则提前返回、若u无效则提前返回、若extend无效则提前返回、类型不符时…
 class Spider(BaseSpider):
     publish_url = "https://www.vip1949.com/"
+    # 发布页 domains + 实际可用的三个镜像, 顺序即优先顺序
+    # zzztool 为主站(list 路由), cadkssb/maihaolian/cd-zj 为镜像(type/label 路由)
     default_sites = [
         "https://www.zzztool.com",
+        "https://www.cadkssb.com",
         "https://maihaolian.com",
         "https://www.cd-zj.com",
     ]
@@ -119,6 +139,7 @@ class Spider(BaseSpider):
         if self.debug:
             print("[maple]", *args)
 
+    # 在判空时执行处理，返回处理后的结果
     def _headers(self, referer=None):
         headers = {
             "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 Chrome/150.0.0.0 Mobile",
@@ -133,6 +154,7 @@ class Spider(BaseSpider):
             headers["Cookie"] = self.cookie
         return headers
 
+    # 读取并返回数据：遍历每一项，在startswith('http'无效时执行处理、若status_code等于200则提前返回、在attempt + 1小于retries时执行处理，返回处理后的结果，捕获异常，避免程序崩溃
     def _fetch(self, url, referer=None, retries=3, timeout=None):
         """请求 HTML(相对路径自动拼接 base_url), 失败返回 ''
         站点对同 IP 高频请求会间歇性断连, 这里做有限次重试
@@ -153,6 +175,7 @@ class Spider(BaseSpider):
                 time.sleep(0.6)
         return ''
 
+    # 读取并返回数据：解析 JSON/YAML 数据，若text无效则提前返回，返回处理后的结果，捕获异常，避免程序崩溃
     def _fetch_json(self, url, referer=None):
         """请求 JSON 接口并解析为 dict, 失败返回 {}"""
         try:
@@ -164,14 +187,27 @@ class Spider(BaseSpider):
             self._log('_fetch_json异常', e)
             return {}
 
-    def _fix_pic(self, u):
+    # 若u无效则提前返回，返回处理后的结果
+    def _fix_pic(self, u, pic_host=None):
+        """图片地址归一化
+        站点会返回三种形态: 绝对地址 / 协议相对(//host/...) / 根相对(/upload/...)
+        根相对地址不拼域名时客户端无法取图, 这里统一补成绝对地址
+        cadkssb 一类站点把图片托管到 baidu gimg 代理(URL 带 query), 需原样保留
+        """
         if not u:
             return ''
+        u = u.strip()
         if u.startswith('//'):
-            return 'https:' + u
-        return u.replace('&amp;', '&')
+            return 'https:' + u.replace('&amp;', '&')
+        if u.startswith('http'):
+            return u.replace('&amp;', '&')
+        ph = (pic_host or self.base_url).rstrip('/')
+        if u.startswith('/'):
+            return ph + u.replace('&amp;', '&')
+        return ph + '/' + u.replace('&amp;', '&')
 
     @staticmethod
+    # 把原始数据解析成结构：解析 JSON/YAML 数据，遍历每一项，若extend无效则提前返回、类型不符时提前返回、在%在s中时执行处理、在=在s中时执行处理、在=在part中时执行处理、在|在s中时执行处理，返回处理后的结果，捕获异常，避免程序崩溃
     def _parse_extend(extend):
         """兼容 dict / JSON 字符串 / key=val&... / ; / | 管道多种格式"""
         if not extend:
@@ -215,6 +251,7 @@ class Spider(BaseSpider):
         except Exception:
             return False
 
+    # 读取并返回数据：解析 JSON/YAML 数据，遍历每一项，在m无效时执行处理、在com不在host中 且 baidu不在host中时执行处理，把符合条件的收集到结果集，返回处理后的结果，捕获异常，避免程序崩溃
     def get_online_host(self, publish_url=None):
         publish_url = publish_url or self.publish_url
         try:
@@ -226,6 +263,18 @@ class Spider(BaseSpider):
             return self.default_sites[0]
         m = re.search(r'const\s+domains\s*=\s*(\[.*?\]);', html, re.S)
         if not m:
+            # 新版发布页把 domains 写进 <script> 后再驱动渲染, 仍用同一段 JSON
+            m = re.search(r'(?:var|let|const)?\s*domains\s*=\s*(\[[\s\S]*?\]);', html)
+        if not m:
+            # 兜底: 直接抓页面里的站点链接(发布页卡片 a.visit-btn)
+            found = []
+            for u in re.findall(r'href="(https?://[^"]+)"', html):
+                host = urllib.parse.urlparse(u).netloc.lower()
+                if host and 'vip1949.com' not in host and 'baidu' not in host:
+                    found.append(u.rstrip('/'))
+            for u in found:
+                if self.check_url_online(u):
+                    return u
             self._log('发布页未找到 domains, 使用默认站点')
             return self.default_sites[0]
         js = m.group(1)
@@ -240,6 +289,10 @@ class Spider(BaseSpider):
             url = (item.get('url') or '').rstrip('/')
             if url and self.check_url_online(url):
                 return url
+        # 发布页里的域名都不可达时, 用 default_sites 里第一个可用的
+        for u in self.default_sites:
+            if self.check_url_online(u):
+                return u.rstrip('/')
         return self.default_sites[0]
 
     # ----------------------------------------------------------
@@ -295,6 +348,7 @@ class Spider(BaseSpider):
                     self._cache_time = now
         self._log('最终 base_url:', self.base_url)
 
+    # 返回结果
     def getName(self):
         return '枫叶影院'
 
@@ -316,10 +370,12 @@ class Spider(BaseSpider):
             "filters": self._build_filters()
         }
 
+    # 返回结果
     def homeVideoContent(self):
         html = self._fetch('/')
         return {"list": self._parse_video_list(html, is_home=True) if html else []}
 
+    # 返回结果
     def _build_filters(self):
         area = [{"n": "全部", "v": ""}, {"n": "大陆", "v": "大陆"}, {"n": "香港", "v": "香港"},
                 {"n": "台湾", "v": "台湾"}, {"n": "美国", "v": "美国"}, {"n": "韩国", "v": "韩国"},
@@ -337,6 +393,7 @@ class Spider(BaseSpider):
         letter = [{"n": "全部", "v": ""}] + [{"n": c, "v": c} for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"] \
             + [{"n": "0-9", "v": "0-9"}]
 
+        # 返回结果
         def opts(pairs):
             return [{"n": k, "v": v} for k, v in pairs]
 
@@ -424,14 +481,21 @@ class Spider(BaseSpider):
 
             # /label/ VIP 精选: 走 HTML 分页(无需验证码)
             if is_label:
-                url = f'{tid}/page/{page}.html'
+                # 两站分页格式不同: zzztool/maihaolian 用 /label/qq/page/N.html,
+                # cadkssb 用 /label/qq/page/N.html 亦可用, 404 则退回旧格式 /label/qq-N.html
+                url = f'{tid.rstrip("/")}/page/{page}.html'
                 html = self._fetch(url)
+                if not html:
+                    html = self._fetch(f'{tid.rstrip("/")}-{page}.html')
                 if html and '系统安全验证' in html:
                     # 标签页也被验证码拦截时, 不产生垃圾 URL, 直接返回空列表
                     return {"list": [], "page": page, "pagecount": 0, "limit": 24, "total": 0}
                 items = self._parse_video_list(html)
-                total = page if len(items) < 24 else page + 2
-                return {"list": items, "page": page, "pagecount": total, "limit": 24, "total": total * 24}
+                # 尾页上限: page-link "尾页" → 兜底当前页 + 1(向后翻继续递增, 站点最后一页自然为空)
+                pagecount = self._tail_page(html)
+                if not pagecount:
+                    pagecount = page + 1
+                return {"list": items, "page": page, "pagecount": pagecount, "limit": 24, "total": 0}
             else:
                 tid = route_tid
 
@@ -472,18 +536,46 @@ class Spider(BaseSpider):
             items = self._parse_video_list(html)
             pagecount = page
             if html and '系统安全验证' not in html:
-                soup = BeautifulSoup(html, 'html.parser')
-                tail = soup.select_one('a.page-link:contains("尾页")')
-                if tail:
-                    m = re.search(r'---(\d+)---', tail.get('href', ''))
-                    if m:
-                        pagecount = int(m.group(1))
+                pagecount = self._tail_page(html) or page
             if not items:
                 pagecount = 0
-            return {"list": items, "page": page, "pagecount": pagecount, "limit": 36, "total": 9999}
+            return {"list": items, "page": page, "pagecount": pagecount, "limit": 36, "total": 0}
         except Exception as e:
             self._log('categoryContent 异常', e)
             return {"list": [], "page": int(pg) if pg else 1, "pagecount": 0}
+
+    @staticmethod
+    # 遍历每一项，若html无效 或 系统安全验证在html中则提前返回、在尾页在label中 或 末页在label中时执行处理，把符合条件的收集到结果集，返回处理后的结果
+    def _tail_page(html):
+        """从列表页分页栏取尾页页码
+        站点分页有两种写法: href 里带 ---页码--- (cupfox/list 路由),
+        /page/2.html 或 /label/qq/page/5.html 这类路径分页
+        找不到尾页链接时返回 0, 由调用方兜底
+        """
+        if not html or '系统安全验证' in html:
+            return 0
+        soup = BeautifulSoup(html, 'html.parser')
+        cands = []
+        for a in soup.select('a.page-link'):
+            label = a.get_text(strip=True)
+            href = a.get('href', '')
+            if ('尾页' in label or '末页' in label):
+                m = re.search(r'---(\d+)---', href)
+                if m:
+                    return int(m.group(1))
+                # 路径形式 /label/qq/page/5.html
+                m = re.search(r'/page/(\d+)\.html', href)
+                if m:
+                    cands.append(int(m.group(1)))
+                m = re.search(r'-(\d+)\.html$', href)
+                if m:
+                    cands.append(int(m.group(1)))
+        # 没有"尾页"文字时退一步: 取 page-link 里最大的页码
+        for a in soup.select('a.page-link'):
+            m = re.search(r'/page/(\d+)\.html', a.get('href', ''))
+            if m:
+                cands.append(int(m.group(1)))
+        return max(cands) if cands else 0
 
     # ----------------------------------------------------------
     # 列表解析
@@ -512,6 +604,7 @@ class Spider(BaseSpider):
             })
         return videos
 
+    # 把原始数据解析成结构：遍历每一项，若html无效则提前返回、在系统安全验证在html中时执行处理、跳过a无效的项、在module-item在el.get('class'中时执行处理、在vod_name无效时执行处理、跳过vod_id无效 或 vod_name无效的项、跳过m无效的项、跳过vod_id在seen中的项，把…
     def _parse_video_list(self, html, is_home=False, is_search=False):
         if not html:
             return []
@@ -520,17 +613,22 @@ class Spider(BaseSpider):
             return []
         soup = BeautifulSoup(html, 'html.parser')
         videos, seen = [], set()
-        is_zzz = 'zzztool' in self.base_url
 
-        cards = soup.select('.module-item') if is_zzz else soup.select('a.public-list-exp')
+        # 卡片选择器按页面实际结构判断: module-item(mac模板) / a.public-list-exp(sts模板)
+        # cadkssb 与 maihaolian 同为 public-list-exp, 域名不参与判断, 站点改版时无需改代码
+        cards = soup.select('.module-item') or soup.select('a.public-list-exp')
         for el in cards:
             try:
-                if is_zzz:
-                    a = el if el.name == 'a' else el.select_one('a')
-                    if not a:
-                        continue
-                    vod_id = a.get('href', '')
-                    vod_name = a.get('title', '').strip() if a else ''
+                a = el if el.name == 'a' else el.select_one('a')
+                if not a:
+                    continue
+                a = a if a.name == 'a' else a.select_one('a')
+                if not a:
+                    continue
+                vod_id = a.get('href', '')
+                if el.select_one('.module-item-pic img') or el.get('class') and 'module-item' in (el.get('class') or []):
+                    # mac 模块卡片
+                    vod_name = a.get('title', '').strip()
                     if not vod_name:
                         tag = el.select_one('.module-card-item-title strong')
                         vod_name = tag.get_text(strip=True) if tag else ''
@@ -543,12 +641,9 @@ class Spider(BaseSpider):
                     if version_left and version_left.get_text(strip=True):
                         vod_year = '「' + version_left.get_text(strip=True) + '」' + vod_year
                 else:
-                    a = el if el.name == 'a' else el.select_one('a.public-list-exp')
-                    if not a:
-                        continue
-                    vod_id = a.get('href', '')
                     if is_search:
-                        title_el = soup.select_one(f'a.thumb-txt[href="{vod_id}"]')
+                        title_el = soup.select_one(f'a.thumb-txt[href="{urllib.parse.quote(vod_id)}"]') \
+                            or soup.select_one(f'a.thumb-txt[href="{vod_id}"]')
                         vod_name = title_el.text.strip() if title_el else ''
                     else:
                         vod_name = a.get('title', '').strip()
@@ -596,35 +691,83 @@ class Spider(BaseSpider):
             if not html:
                 return result
             soup = BeautifulSoup(html, 'html.parser')
-            is_zzz = 'zzztool' in self.base_url
 
-            if is_zzz:
-                name_el = soup.select_one('.module-info-heading h1')
-                vod_name = name_el.get_text(strip=True) if name_el else ''
-                pic_el = soup.select_one('.module-item-pic img')
-                vod_pic = self._fix_pic(pic_el.get('data-src', '') or pic_el.get('src', '')) if pic_el else ''
-                director = actor = ''
-                for item in soup.select('.module-info-item'):
-                    t = item.select_one('.module-info-item-title')
-                    c = item.select_one('.module-info-item-content')
-                    if not t or not c:
+            # 标题: module模板 / slide模板 / this-desc-title 三种布局
+            vod_name = ''
+            for sel in ('.module-info-heading h1', 'h3.slide-info-title',
+                        '.this-desc-title', '.slide-desc-title', 'h1.title'):
+                el = soup.select_one(sel)
+                if el and el.get_text(strip=True):
+                    vod_name = el.get_text(strip=True)
+                    break
+            if not vod_name:
+                t = re.search(r'<title>《([^》]+)》', html)
+                if t:
+                    vod_name = t.group(1)
+
+            # 封面: 站点三种模板 + 部分站点把图托管到外链(baidu gimg), _fix_pic 统一处理
+            vod_pic = ''
+            for sel in ('.module-item-pic img', 'img.lazy', '.this-pic img',
+                        '.slide-desc-box img', '.ds-vod-detail img', '.vod-detail img'):
+                el = soup.select_one(sel)
+                if el:
+                    vod_pic = self._fix_pic(el.get('data-src', '') or el.get('src', ''))
+                    if vod_pic:
+                        break
+
+            # 导演 / 演员: module-info-item(结构化) + slide-info(整行文本) + this-info(新版)
+            director = actor = ''
+            for item in soup.select('.module-info-item'):
+                t = item.select_one('.module-info-item-title')
+                c = item.select_one('.module-info-item-content')
+                if not t or not c:
+                    continue
+                tt = t.get_text(strip=True)
+                cc = c.get_text(strip=True)
+                if '导演' in tt:
+                    director = cc
+                elif '主演' in tt:
+                    actor = cc
+            if not (director or actor):
+                for el in soup.select('.slide-info, .this-info'):
+                    text = el.get_text(' ', strip=True)
+                    if not text:
                         continue
-                    tt = t.get_text(strip=True)
-                    cc = c.get_text(strip=True)
-                    if '导演' in tt:
-                        director = cc
-                    elif '主演' in tt:
-                        actor = cc
-                cont_el = soup.select_one('.module-info-introduction-content p')
-                vod_content = cont_el.get_text(strip=True) if cont_el else ''
-                play_from, play_url = [], []
-                name_counts = {}
-                for tab in soup.select('.mx-anthology-tab .mx-anthology-tab-label'):
-                    raw = tab.get_text(strip=True)
-                    if raw:
-                        name_counts[raw] = name_counts.get(raw, 0) + 1
-                        play_from.append(f"{raw}-{name_counts[raw]}" if name_counts[raw] > 1 else raw)
-                for panel in soup.select('.mx-anthology-panel'):
+                    # 两种写法: "导演：xxx" 与 "导演:xxx"
+                    cleaned = text.replace('导演：', '导演:').replace('演员：', '演员:')
+                    if cleaned.startswith('导演:') and not director:
+                        director = cleaned.split(':', 1)[1].strip()
+                    elif cleaned.startswith('演员:') and not actor:
+                        actor = cleaned.split(':', 1)[1].strip()
+
+            vod_content = ''
+            for sel in ('.module-info-introduction-content p', '#height_limit',
+                        '.this-desc', '.ds-vod-detail .this-desc', '.vod-content'):
+                el = soup.select_one(sel)
+                if el:
+                    vod_content = el.get_text(' ', strip=True)
+                    if vod_content:
+                        break
+
+            # 播放线路: 站点有 mx-anthology(mac模板) 与 anthology(template/sts模板) 两套 tab
+            play_from, play_url = [], []
+            name_counts = {}
+            tabs = soup.select('.mx-anthology-tab .mx-anthology-tab-label')
+            tabs = tabs or soup.select('.anthology-tab a.swiper-slide, .anthology-tab .swiper-slide')
+            for tab in tabs:
+                raw = re.sub(r'<[^>]+>', '', str(tab)).strip()
+                # tab 文案常带集数角标(蓝光2k60)和序号小图标, 只留线路名主体
+                raw = re.sub(r'\s*\d+\s*$', '', raw).strip()
+                if not raw:
+                    raw = tab.get_text(' ', strip=True)
+                    raw = re.sub(r'\s*\d+\s*$', '', raw).strip()
+                if raw:
+                    name_counts[raw] = name_counts.get(raw, 0) + 1
+                    play_from.append(f"{raw}-{name_counts[raw]}" if name_counts[raw] > 1 else raw)
+
+            blocks = soup.select('.mx-anthology-panel')
+            if blocks:
+                for panel in blocks:
                     eps = []
                     for a in panel.select('.mx-anthology-item a'):
                         title = a.get_text(strip=True)
@@ -634,26 +777,6 @@ class Spider(BaseSpider):
                     if eps:
                         play_url.append('#'.join(reversed(eps)))
             else:
-                name_el = soup.select_one('h3.slide-info-title')
-                vod_name = name_el.get_text(strip=True) if name_el else ''
-                pic_el = soup.select_one('img.lazy')
-                vod_pic = self._fix_pic(pic_el.get('data-src', '')) if pic_el else ''
-                director = actor = ''
-                for el in soup.select('.slide-info'):
-                    text = el.get_text(' ').strip()
-                    if text.startswith('导演：'):
-                        director = text.replace('导演：', '').strip()
-                    elif text.startswith('演员：'):
-                        actor = text.replace('演员：', '').strip()
-                cont_el = soup.select_one('#height_limit')
-                vod_content = cont_el.get_text(' ', strip=True) if cont_el else ''
-                play_from, play_url = [], []
-                name_counts = {}
-                for tab in soup.select('.anthology-tab a.swiper-slide'):
-                    raw = re.sub(r'<[^>]+>', '', str(tab)).strip() or tab.get_text(' ', strip=True).strip()
-                    if raw:
-                        name_counts[raw] = name_counts.get(raw, 0) + 1
-                        play_from.append(f"{raw}-{name_counts[raw]}" if name_counts[raw] > 1 else raw)
                 for block in soup.select('.anthology-list-box'):
                     eps = []
                     for a in block.select('li a'):
@@ -667,6 +790,7 @@ class Spider(BaseSpider):
                     if eps:
                         play_url.append('#'.join(reversed(eps)))
 
+            # tab 与剧集框数量不一致时(站点偶发展示顺序错位), 以有内容的框为准
             valid_from = [pf for i, pf in enumerate(play_from) if i < len(play_url)]
             result["list"].append({
                 "vod_id": vid,
@@ -727,10 +851,15 @@ class Spider(BaseSpider):
                 if items:
                     return {"list": items, "page": page, "pagecount": 1, "limit": 50, "total": len(items)}
 
-            # 2) HTML 搜索兜底(cupfox-search, 可能触发验证码)
+            # 2) HTML 搜索兜底: 站点有 /search/ 与 /cupfox-search/ 两种路由
+            # 用站点自身的搜索表单 action 决定前缀, index.php/ajax/suggest 关闭后这是唯一入口
             _search_prefix = 'search' if 'zzztool' in self.base_url else 'cupfox-search'
             url = f'/{_search_prefix}/-------------.html?wd={kw}'
             html = self._fetch(url)
+            if not html:
+                # 前缀猜错时(主站/cadkssb 模板不同), 换另一个再试
+                alt_prefix = 'cupfox-search' if _search_prefix == 'search' else 'search'
+                html = self._fetch(f'/{alt_prefix}/-------------.html?wd={kw}')
             if html and '系统安全验证' not in html:
                 items = self._parse_video_list(html, is_search=True)
                 return {"list": items, "page": page, "pagecount": 1, "limit": 36, "total": len(items)}
@@ -774,6 +903,7 @@ class Spider(BaseSpider):
         self._cache_plist_time = now
         return plist
 
+    # 把原始数据解析成结构：若token_page无效则提前返回、在token无效时执行处理、若token无效则提前返回、若final_url无效则提前返回，返回处理后的结果，捕获异常，避免程序崩溃
     def _parse_with_domain(self, base_domain, video_url, timeout=None):
         """在指定解析域名上完成 换token + 换取播放地址 两步
         返回 (final_url, err) ; err 为 None 表示成功
@@ -831,6 +961,24 @@ class Spider(BaseSpider):
             final_url = base_domain + final_url
         return final_url, None
 
+    # 解析服务返回的占位/演示地址: 播放器会显示图片广告而不是正片, 一律当成解析失败
+    JUNK_PATTERNS = (
+        '/api/vod/demo/',      # 演示播放列表
+        'yun.jiexicn.top',     # 占位托管域名
+        'playlist.m3u8',       # 通用示例播放表
+        'demo.gif',            # 图片广告
+        'image.baidu.com',     # 占位图托管
+    )
+
+    @classmethod
+    # 校验并判断是否满足条件：若u无效则提前返回，返回处理后的结果
+    def _is_junk_url(cls, url):
+        u = (url or '').lower()
+        if not u:
+            return True
+        return any(p in u for p in cls.JUNK_PATTERNS)
+
+    # 遍历每一项，在判空时执行处理、在preferred无效时执行处理、在_is_junk_url(url无效时执行处理、在拒绝不在err中时执行处理，返回处理后的结果
     def _resolve_video_url(self, video_url, play_id=None):
         """按 player_aaaa.from 选择解析线路
         1) ps=0 自营线路 -> 直连返回
@@ -868,17 +1016,23 @@ class Spider(BaseSpider):
         errors = []
         for dom in usable:
             url, err = self._parse_with_domain(dom, video_url)
-            if url:
+            if url and not self._is_junk_url(url):
                 self._parse_bad.pop(dom.rstrip('/'), None)
                 return url
+            if url and self._is_junk_url(url):
+                # 解析服务返回 demo / 广告占位(线路已坏): 换下一个域名, 都这样才判失败
+                errors.append(f'{dom} 返回占位地址')
+                self._log(f'{line_key} 解析到占位地址, 继续换域名', url[:80])
+                continue
             errors.append(err)
             # 只有连接层面的失败才计入域名失效, 服务方明确拒绝(code!=200)不是域名故障
             if '拒绝' not in (err or ''):
                 self._parse_bad[dom.rstrip('/')] = time.time()
             self._log(f'{line_key} 解析失败: {err}')
 
-        raise RuntimeError('; '.join(errors))
+        raise RuntimeError('; '.join(e for e in errors if e))
 
+    # 解析 JSON/YAML 数据，在$在str(id中时执行处理、若'.m3u8在play_path中 或 .mp4在play_path中则提前返回、在html无效时执行处理、在video_url无效时执行处理、在encrypt等于1时执行处理、在encrypt等于2时执行处理、在'.m3u8在vid…
     def playerContent(self, flag, id, vipFlags):
         play_url = id or ''
         if '$' in str(id):
@@ -939,9 +1093,13 @@ class Spider(BaseSpider):
                 )
 
             if video_url.startswith('http') and ('.m3u8' in video_url or '.mp4' in video_url):
+                if self._is_junk_url(video_url):
+                    raise RuntimeError(f'站点返回的播放地址为占位内容 {video_url[:80]}')
                 return {"parse": 0, "url": video_url, "header": self._headers(referer=self.base_url)}
 
             final_url = self._resolve_video_url(video_url, play_id)
+            if self._is_junk_url(final_url):
+                raise RuntimeError(f'解析结果为占位地址 {final_url[:80]}')
             return {"parse": 0, "url": final_url, "header": self._headers(referer=self.base_url)}
         except Exception as e:
             first_err = str(e)
@@ -957,6 +1115,7 @@ class Spider(BaseSpider):
         return {"parse": 0, "url": "", "msg": first_err}
 
     @staticmethod
+    # 若m无效则提前返回，返回处理后的结果
     def _ep_no(text):
         """从集名或集标识里取出集号数字
         详情页集名有 集1 / 集01 / 第01集 / 01 等写法, 统一成不含前导零的数字串
@@ -966,6 +1125,7 @@ class Spider(BaseSpider):
             return str(text).strip()
         return m.group(0).lstrip('0') or '0'
 
+    # 遍历每一项，若murl无效则提前返回、若ep_map无效则提前返回、若cands无效则提前返回、跳过line等于flag 或 token等于ep_token的项，返回处理后的结果，捕获异常，避免程序崩溃，无论成功失败都执行的收尾清理
     def _play_alternate(self, play_path, flag):
         """在同一部影片的其它线路里找同一集, 依次尝试
         依赖 detailContent 建立的 _ep_map; 返回 (线路, 播放地址) 或 None
@@ -1021,11 +1181,14 @@ class Spider(BaseSpider):
     def localProxy(self, param=''):
         return {}
 
+    # 返回结果
     def isVideoFormat(self, url):
         return False
 
+    # 返回结果
     def manualVideoCheck(self):
         return False
 
+    # 释放资源并做收尾
     def destroy(self):
         pass

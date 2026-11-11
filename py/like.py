@@ -1,3 +1,6 @@
+# like.py
+# 语言：Python　共 249 行
+# 说明：由「自动添加注释」根据代码逻辑生成（本地静态分析，无网络）
 # -*- coding: utf-8 -*-
 # by @嗷呜
 import random
@@ -9,21 +12,27 @@ sys.path.append('..')
 from base.spider import Spider
 
 
+# 遍历每一项，在pg等于1时执行处理、在k在new_data中时执行处理、在id无效时执行处理、在h无效时执行处理、在pg大于1时执行处理，把符合条件的收集到结果集，返回处理后的结果，捕获异常，避免程序崩溃
 class Spider(Spider):
 
+    # 初始化运行所需的环境
     def init(self, extend=""):
         self.did = self.random_str(32)
         pass
 
+    # 定义方法 getName
     def getName(self):
         pass
 
+    # 定义方法 isVideoFormat
     def isVideoFormat(self, url):
         pass
 
+    # 定义方法 manualVideoCheck
     def manualVideoCheck(self):
         pass
 
+    # 释放资源并做收尾
     def destroy(self):
         pass
 
@@ -39,6 +48,7 @@ class Spider(Spider):
         'Referer': f'{rhost}/',
     }
 
+    # 返回处理后的结果
     def homeContent(self, filter):
         result = {}
         cateManual = {
@@ -66,6 +76,7 @@ class Spider(Spider):
         result['filters'] = filters
         return result
 
+    # 返回结果
     def homeVideoContent(self):
         data=self.fetch(f'{self.hhost}/portal/lw/v5/channel/recommend?v=13.014.21150', headers=self.headers).json()
         vlist = []
@@ -85,6 +96,7 @@ class Spider(Spider):
                     })
         return {'list':vlist}
 
+    # 遍历每一项，在pg等于1时执行处理、在k在new_data中时执行处理、在id无效时执行处理、在h无效时执行处理，返回处理后的结果
     def categoryContent(self, tid, pg, filter, extend):
         if pg == "1":
             self.sid = ''
@@ -123,6 +135,7 @@ class Spider(Spider):
         result['total'] = 999999
         return result
 
+    # 遍历每一项，在pg大于1时执行处理，把符合条件的收集到结果集，返回处理后的结果，捕获异常，避免程序崩溃
     def detailContent(self, ids):
         ids = ids[0].split('@')
         ids[-1] = self.d64(ids[-1])
@@ -177,6 +190,7 @@ class Spider(Spider):
             }
         return {'list':[vod]}
 
+    # 返回结果
     def searchContent(self, key, quick, pg="1"):
         data=self.fetch(f'{self.hhost}/portal/lw/search/homePageV3?key={key}&current_page={pg}&mode=1&source=input&suggest=&version=13.014.21150&pageNum={pg}&pageSize=25&pu=&u={self.did}&scale=150&token=&userVip=0&conduit=&vipType=-1&os=&osShortName=win10&dataType=&appMode=', headers=self.headers).json()
         videos = []
@@ -198,12 +212,15 @@ class Spider(Spider):
                 })
         return {'list':videos,'page':pg}
 
+    # 返回结果
     def playerContent(self, flag, id, vipFlags):
         return  {'jx':1,'parse': 1, 'url': id, 'header': ''}
 
+    # 定义方法 localProxy
     def localProxy(self, param):
         pass
 
+    # 读取并返回数据：返回结果，捕获异常，避免程序崩溃
     def fetch_page_data(self, page, id):
         try:
             url = f'{self.dhost}/h5/mina/avlist/{page}/{id}/'
@@ -212,6 +229,7 @@ class Spider(Spider):
         except:
             return []
 
+    # 返回处理后的结果，捕获异常，避免程序崩溃
     def getf(self,body):
         data=self.fetch(f'{self.hhost}/portal/lw/videolib/tag?channel_id={body["type_id"]}&tagAdd=&selected_tag_name=&version=13.014.21150&device={self.did}&uid=', headers=self.headers).json()
         ft = []
@@ -225,6 +243,7 @@ class Spider(Spider):
                 print(i)
         return (body['type_id'], ft)
 
+    # 返回结果，捕获异常，避免程序崩溃
     def e64(self, text):
         try:
             text_bytes = text.encode('utf-8')
@@ -234,6 +253,7 @@ class Spider(Spider):
             print(f"Base64编码错误: {str(e)}")
             return ""
 
+    # 返回结果，捕获异常，避免程序崩溃
     def d64(self,encoded_text: str):
         try:
             encoded_bytes = encoded_text.encode('utf-8')
@@ -243,6 +263,7 @@ class Spider(Spider):
             print(f"Base64解码错误: {str(e)}")
             return ""
 
+    # 返回结果
     def random_str(self,length=16):
         hex_chars = '0123456789abcdef'
         return ''.join(random.choice(hex_chars) for _ in range(length))
