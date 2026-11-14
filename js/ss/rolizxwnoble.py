@@ -80,12 +80,24 @@ class Spider:
     def _fetch(self, url, timeout=30):
         try:
             r = self.session.get(url, headers=self.headers, timeout=timeout, verify=False)
-            r.encoding = "utf-8"
-            if r.status_code == 200:
-                return r.text
-            return ""
-        except Exception:
-            return ""
+        except Exception as e:
+            raise ValueError("网络请求失败: %s" % e)
+        r.encoding = "utf-8"
+        if r.status_code != 200:
+            raise ValueError("HTTP %s: %s" % (r.status_code, url))
+        text = r.text
+        if self._is_parked(text):
+            raise ValueError("站点返回停泊/跳转页，域名疑似已失效: %s" % url)
+        return text
+
+    @staticmethod
+    def _is_parked(text):
+        # 此类镜像站域名过期后由 Cloudflare 停泊页接管：JS 倒计时跳转到无关站点，
+        # 页面不含任何 /vodtype/、/voddetail/ 内容，不能当作成功空列表处理
+        for kw in ("aissdxi.buzz", "aissdj.buzz", "aissdj.com", "spTime"):
+            if kw in (text or ""):
+                return True
+        return False
 
     def _load_categories(self, page_text):
         cats = []
@@ -184,7 +196,7 @@ class Spider:
         for media in set(re.findall(r"https?://[^\s\"'<>]+\.(?:m3u8|mp4|flv)(?:\?[^\s\"'<>]*)?", page_text or "")):
             links.append("直链$" + media)
         if not links:
-            links.append("立即播放$" + base_url.replace("/voddetail/", "/vodplay/").rstrip("/") + "-1-1/")
+            raise ValueError("详情页未找到播放链接: %s" % base_url)
         froms = []
         urls = []
         for entry in links:

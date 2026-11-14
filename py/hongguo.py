@@ -233,6 +233,9 @@ EPISODE_PREFIX = "hg-episode-v1:"
 # 红果每集视频模型按清晰度返回多条独立线路（360/480/540/720/1080），
 # 每条带 main_url + backup_url 双 CDN 与独立加密材料。这里把清晰度作为
 # TVBox 多线路暴露；内封音/视轨在解密 _rewrite_moov 时天然全部保留。
+# 注意（2026-11）：App 取流接口 multi_video_model 目前对任何请求都回空响应，
+# 实际取流走官网公开接口 fallback-play-info，它只有 360P 一档，所以现在五条
+# 线路解析出来是同一条 360P 直链；接口恢复后这五档会按各自清晰度生效。
 _HG_QUALITY_LINES = (
     ("1080", "超清"),
     ("720",  "高清"),
@@ -248,20 +251,63 @@ _QUALITY_LINE_NAME_TO_Q = {
 
 
 def _split_episode_token(token: str) -> tuple[str, str]:
-    """把 'hg-episode-v1:<q>:<vid>' 解析为 (清晰度, vid)；兼容旧格式 'hg-episode-v1:<vid>'。"""
-    body = str(token or "")
+    """把播放值解析为 (清晰度, vid)；清晰度为空表示 token 未带清晰度。
+
+    壳传进来的 id 是整条播放值 '第1集$hg-episode-v1:1080:<vid>'（TVBox /
+    fongmi / OK影视 都是把 vod_play_url 里的整段回传），早期壳也可能只传
+    token 本身，再老的格式是 'hg-episode-v1:<vid>'。三种形态都要认。
+    """
+    body = str(token or "").strip()
+    if "$" in body:
+        body = body.rsplit("$", 1)[-1].strip()
     if body.startswith(EPISODE_PREFIX):
         body = body[len(EPISODE_PREFIX):]
     if ":" in body:
         head, tail = body.split(":", 1)
         if head.isdigit():
-            return head, tail
-    return "1080", body
+            return head, tail.strip()
+    return "", body
 
-# 官网搜索 SSR 固定约 10 条且几乎不认 page；用多关键词轮换实现“翻页”
-_AI_MANJU_KEYWORDS = [
-    "AI漫剧", "AI动画", "AI短剧", "AI动漫", "漫剧AI", "二次元AI", "AI漫画", "动画短剧",
-]
+
+def _flag_quality(flag: str) -> str:
+    """从线路名（flag，如 '红果超清' / '720'）反推清晰度。"""
+    text = str(flag or "")
+    for name_key, candidate_q in _QUALITY_LINE_NAME_TO_Q.items():
+        if name_key and name_key in text:
+            return candidate_q
+    return ""
+
+
+# ---- 官网内容通道（2026-11 实测）----
+# 站点把内容分成 真人剧/漫剧/AI剧/漫画 四个通道，只有路径式分类页能切换通道，
+# 查询式 /category?tab= 只认 tab(1=真人剧/2=漫画) 与 topic；排序/性别/时间/背景
+# 等参数服务端一概忽略，所以"最新/最热"改走排行榜页，"男频/女频"没有对应数据。
+_HG_CATEGORY_ROUTES = {
+    "drama": ("真人剧", "real-drama"),
+    "comic_drama": ("漫剧", "comic-drama"),
+    "ai_drama": ("AI剧", "ai-drama"),
+    "comic": ("漫画", "comic"),
+}
+# 旧版 type_id 别名，保住已有收藏/配置的入口
+_HG_CATEGORY_ALIAS = {
+    "all": "drama",
+    "comic": "comic",
+    "manju": "comic_drama",
+    "ai_comic": "ai_drama",
+    "ai_manju": "ai_drama",
+    "漫剧": "comic_drama",
+    "AI漫剧": "ai_drama",
+}
+_HG_RANK_ROUTES = {
+    "hot_drama": ("最热·真人剧", "hot-real-drama"),
+    "new_drama": ("最新·真人剧", "new-real-drama"),
+    "hot_comic_drama": ("最热·漫剧", "hot-comic-drama"),
+    "hot_ai_drama": ("最热·AI剧", "hot-ai-drama"),
+}
+_HG_RANK_ALIAS = {
+    "hot": "hot_drama",
+    "latest": "new_drama",
+}
 
 
 # ---- 本机解密缓存 + 自动清理 ----
@@ -389,6 +435,103 @@ def _hg_cache_clear_all() -> None:
         pass
 
 
+# 壳里播放器认得的标准视轨四字符码；bvc2（ByteVC2）不在其中，只出声音不出画面
+_DECODABLE_ENTRIES = (b"hvc1", b"hev1", b"avc1", b"avc3")
+
+# 所有可能出现在 stsd 里的轨类型四字符码（含视频类，用于区分音/视轨）
+_VIDEO_FOURCCS = (b"hvc1", b"hev1", b"hvc2", b"hev2", b"avc1", b"avc3",
+                  b"bvc2", b"bv2C", b"av01", b"vp09", b"encv")
+
+
+def _hg_moov_fourcc(moov: bytes) -> bytes:
+    """从 moov 的 stsd 里取视轨 sample entry 四字符码。
+
+    moov 里音轨、视轨各有一个 stsd，谁在前不固定（实测有音轨 mp4a 在前的样本）。
+    只认第一个 stsd 会把 hvc1 误判成 mp4a，于是能播的直链被验成不可播；
+    这里按顺序找第一个「视频类」四字符码。
+    """
+    first = b""
+    buf = bytes(moov or b"")
+    i = buf.find(b"stsd")
+    pos = 0
+    while i >= 0:
+        j = i + 4 + 8
+        cc = buf[j + 4 : j + 8]
+        if not first:
+            first = cc
+        if cc in _VIDEO_FOURCCS:
+            return cc
+        pos = i + 4
+        i = buf.find(b"stsd", pos)
+    return first
+
+
+def _hg_entry_is_bytevc2(item: Any) -> bool:
+    """单个清晰度条目是不是 ByteVC2（壳解不了，会黑屏只有声音）。"""
+    return isinstance(item, Mapping) and "bytevc2" in str(item.get("gear_des_key") or "")
+
+
+def _hg_entry_size(item: Any) -> int:
+    """从模型条目里取字节数（video_meta.size 优先，缺了看顶层 size）。"""
+    try:
+        if not isinstance(item, Mapping):
+            return 0
+        meta = item.get("video_meta")
+        if not isinstance(meta, Mapping):
+            meta = {}
+        return int(
+            _first(meta.get("size"), item.get("size"), meta.get("bytes"),
+                   item.get("bytes")) or 0
+        )
+    except Exception:
+        return 0
+
+
+def _hg_plain_url_session(url: str, size: int = 0) -> Any:
+    """上游本就是未加密直链时，验成标准 hvc1/avc1 且中段 206 才返回直通会话。
+
+    站点对部分集数给的是 1:normal（没有 encrypt_info）：这类流不需要解密，
+    但同样不能把 bytevc2（bvc2，黑屏有声）或加密壳丢给播放器，
+    所以沿用「四字符码 + 视频轨 + 中段 206」三重校验，三条候选都验不过就返回 None，
+    交给调用方报错重试，绝不把 bvc2 丢给播放器。
+    """
+    if not isinstance(url, str) or not url.startswith("http"):
+        return None
+    try:
+        total, _moov_start, moov = _fetch_moov(url)
+    except Exception:
+        return None
+    if _hg_moov_fourcc(moov) not in _DECODABLE_ENTRIES:
+        return None
+    if not _moov_has_video_track(moov):
+        return None
+    mid = max((total or size) // 2, 1024)
+    try:
+        head = requests.get(
+            url,
+            headers={"Range": "bytes=%d-%d" % (mid, mid + 1023), "User-Agent": MEDIA_UA},
+            timeout=8,
+        )
+        if head.status_code != 206:
+            return None
+    except Exception:
+        return None
+    return _PlainSession(url, total or size)
+
+
+def _hg_cached_ok(body: Any) -> bool:
+    """旧的整集缓存可能是 bvc2（黑屏有声），吐出去之前先验一下视轨编码。"""
+    try:
+        if not body:
+            return False
+        i = bytes(body).find(b"stsd")
+        if i < 0:
+            return True
+        return bytes(body)[i + 16 : i + 20] in _DECODABLE_ENTRIES
+    except Exception:
+        return True
+
+
 def _hg_cache_get(vid: str, quality: str) -> bytes | None:
     _hg_cache_cleanup(False)
     path = _hg_cache_path(vid, quality)
@@ -423,10 +566,6 @@ def _hg_cache_put(vid: str, quality: str, data: bytes) -> None:
                 os.remove(path + ".tmp")
         except Exception:
             pass
-
-
-def _aes_is_fast() -> bool:
-    return AES_BACKEND in ("cryptography", "pycryptodome")
 
 
 def _aes_is_fast() -> bool:
@@ -534,12 +673,12 @@ def _multi_download(url: str, headers: dict | None = None, timeout: int = 90, wo
     return bytes(buf)
 
 
-
-_MANJU_KEYWORDS = [
-    "漫剧", "动漫短剧", "二次元", "漫画短剧", "国漫短剧", "日漫", "动态漫", "动画剧",
-]
-
 VIDEO_URL = "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/multi_video_model/v1/"
+VIDEO_URL_ALT = "https://api5-normal-lf.fqnovel.com/novel/player/multi_video_model/v1/"
+# 2026-11-11 实测情报：multi_video_model/v1/ 已停服（任何请求只回空包），
+# 同主机生效的是 video_model/v1/，请求体改为顶层 video_id。两套端点并存，自动择优。
+VIDEO_URL_SINGLE = "https://api5-normal-sinfonlineb.fqnovel.com/novel/player/video_model/v1/"
+VIDEO_URL_SINGLE_ALT = "https://api5-normal-lf.fqnovel.com/novel/player/video_model/v1/"
 UA = "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 APP_UA = "com.phoenix.read/71332 (Linux; U; Android 16; zh_CN; 25053RT47C; Build/BP2A.250605.031.A3; Cronet/TTNetVersion:04657795 2026-01-23 QuicVersion:c67e9834 2025-09-08)"
 MEDIA_UA = "com.phoenix.read/71332"
@@ -585,10 +724,83 @@ def _first(*values: Any) -> str:
 
 def _json_response(response: requests.Response) -> Any:
     response.raise_for_status()
+    if not response.content:
+        # 上游（fqnovel video_model 一类 App 接口）静默拒绝时是 HTTP 200 +
+        # Content-Length: 0。这里必须显式报错，不能当成"空数据=成功"放行。
+        raise HongguoPluginError(
+            "上游返回空响应（HTTP %s，Content-Length %s）：接口已关闭或需要登录态"
+            % (response.status_code, response.headers.get("Content-Length"))
+        )
     try:
         return response.json()
     except ValueError as exc:
         raise HongguoPluginError("上游响应不是 JSON") from exc
+
+
+# ---- 官网公开取流（播放器自己在用的 Web 接口，无需签名/设备号/登录）----
+# 2026-11 实测：
+#   POST /api/video/protected/play-info          {series_id, item_id, definition}
+#     → DASH：视频/音频两条独立 BaseURL + player_access_key，媒体由播放器插件
+#       本地解密（Mp4EncryptPlayer）。单 URL 拿不到完整可播文件，暂不使用。
+#   POST /api/video/protected/fallback-play-info  {item_id}
+#     → 单个渐进式 mp4：完整时长、avc1 + mp4a 双轨、明文、CDN 支持 Range。
+#       这是"公开回退"档（definition 参数不生效，固定 360P）。
+# 有它就能直接给播放器一条直链，不需要本机 Range 解密服务；App 取流接口
+# （multi_video_model）恢复后仍可走下面那套拿更高清晰度，两者互为兜底。
+_HG_FALLBACK_PLAY_INFO_URL = SITE + "/api/video/protected/fallback-play-info"
+
+
+def _hg_web_headers() -> dict[str, str]:
+    # 实测只需 User-Agent；不带头也通，带上更稳。
+    return {
+        "User-Agent": UA,
+        "Accept": "application/json",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+
+
+def _hg_public_play(video_id: str, timeout: int = 25) -> dict[str, Any]:
+    """官网公开取流：返回 {main_url, backup_url, url_expire}，拿不到返回带 error 的空 dict。
+
+    只有免费试看集能拿到（站点按 accessible_episode_cnt 放行，通常前 3 集）；
+    VIP 集返回 403 protected/public_fallback_unavailable，属正常拒绝，不重试。
+    """
+    last: dict[str, Any] = {}
+    for attempt in range(2):
+        try:
+            response = requests.post(
+                _HG_FALLBACK_PLAY_INFO_URL,
+                headers=_hg_web_headers(),
+                json={"item_id": str(video_id)},
+                timeout=timeout,
+            )
+            if response.status_code >= 500 or response.status_code in (408, 429):
+                last = {"error": "http %s" % response.status_code}
+            elif response.status_code != 200:
+                # 403/400 是站点的明确拒绝，重试没有意义
+                last = {"error": "http %s %s" % (response.status_code, response.text[:60])}
+                return last
+            else:
+                data = response.json() or {}
+                url = _text(data.get("main_url"))
+                if url and _looks_like_url(url):
+                    backup = _text(data.get("backup_url"))
+                    return {
+                        "main_url": url,
+                        "backup_url": backup if _looks_like_url(backup) else url,
+                        "url_expire": int(data.get("url_expire") or 0),
+                    }
+                reason = _text((data.get("base_resp") or {}).get("StatusMessage"))
+                last = {"error": "no main_url%s" % (": " + reason if reason else "")}
+                return last
+        except Exception as error:
+            last = {"error": "%s: %s" % (error.__class__.__name__, error)}
+        try:
+            time.sleep(0.4)
+        except Exception:
+            pass
+    return last
+
 
 def _get_html(url: str, *, attempts: int = _HTML_FETCH_ATTEMPTS) -> str:
     last_error: Exception | None = None
@@ -744,6 +956,25 @@ def _find_box(data: memoryview, fourcc: bytes, start: int) -> tuple[int, int]:
 def _box_body(data: memoryview, fourcc: bytes, start: int) -> memoryview | None:
     offset, size = _find_box(data, fourcc, start)
     return data[offset + 8 : offset + size] if offset >= 0 else None
+
+
+def _moov_has_video_track(moov: bytes) -> bool:
+    """moov 中是否存在 hdlr='vide' 的轨。用于校验某清晰度是否真的带视轨。"""
+    view = memoryview(moov)
+    search = 0
+    found_trak = False
+    while True:
+        trak, trak_size = _find_box(view, b"trak", search)
+        if trak < 0:
+            break
+        found_trak = True
+        search = trak + max(trak_size, 8)
+        hdlr = _box_body(view, b"hdlr", trak + 8)
+        if hdlr is not None and len(hdlr) >= 12:
+            if bytes(hdlr[8:12]) == b"vide":
+                return True
+    # 解析不出任何 trak 时不轻易判死刑，交由后续解密流程定夺
+    return not found_trak
 
 def _parse_track(
     moov: memoryview,
@@ -1107,6 +1338,71 @@ def _sample_table(moov: bytes, moov_start: int) -> list[tuple[int, int, bytes]]:
     return samples
 
 
+class _PlainSession:
+    """直通会话：上游是标准 hvc1/avc1 MP4（未加密），按 Range 原样转发。
+
+    站点对部分集数给的是未加密直链（gear_des_key 为 1:normal、无 encrypt_info），
+    这类流不需要 CENC 解密；但同样不能把 bytevc2 或加密壳丢给播放器（黑屏有声），
+    所以只在校验过 moov 四字符码、视频轨与中段 206 之后才建立。
+    它兼容 _StreamSession 的接口（url / total / expired / iter_range），
+    _StreamHandler 与 playerContent 因此可以无差别共用同一条通路。
+    """
+
+    def __init__(self, url: str, total: int) -> None:
+        self.url = url
+        self.total = int(total)
+        self.url_expire = 0
+        self.created = time.time()
+
+    def expired(self) -> bool:
+        return time.time() - self.created > _STREAM_TTL_SECONDS
+
+    def iter_range(self, start: int, end: int, chunk: int = 512 * 1024):
+        position = start
+        while position <= end:
+            stop = min(end, position + chunk - 1)
+            last_error = None
+            block = None
+            # 轻量重试：网络抖动就地消化，避免升级到昂贵的整会话重建
+            for attempt in range(3):
+                if attempt:
+                    time.sleep(0.5 * attempt)
+                try:
+                    response = requests.get(
+                        self.url,
+                        headers={
+                            "Range": "bytes=%d-%d" % (position, stop),
+                            "User-Agent": MEDIA_UA,
+                            "Referer": "https://novel.snssdk.com/",
+                        },
+                        timeout=30,
+                        stream=True,
+                    )
+                except requests.RequestException as error:
+                    last_error = error
+                    continue
+                try:
+                    if response.status_code not in (200, 206):
+                        raise HongguoPluginError("直通上游返回 %s" % response.status_code)
+                    block = b"".join(response.iter_content(64 * 1024))
+                    expected = stop - position + 1
+                    if response.status_code == 206 and len(block) < expected:
+                        raise HongguoPluginError(
+                            "直通分片长度不足 %d/%d" % (len(block), expected))
+                    last_error = None
+                    break
+                except (requests.RequestException, HongguoPluginError) as error:
+                    last_error = error
+                    block = None
+                finally:
+                    response.close()
+            if last_error is not None:
+                raise last_error
+            if block:
+                yield block
+            position = stop + 1
+
+
 class _StreamSession:
     """按 Range 逐块拉取加密 MP4，边下边解 CENC，供本地播放器直连。"""
 
@@ -1189,6 +1485,103 @@ class _StreamSession:
             cursor += len(block)
 
 
+_EP_PREF: dict[str, bool | None] = {"single": None}
+_EP_LOCK = threading.Lock()
+
+
+def _ep_modes_ordered() -> tuple[bool, bool]:
+    """端点择优：multi_video_model 与 video_model 哪个最近成功就先用哪个。
+
+    2026-11-11：multi_ 已停服只回空包，single 生效；保留双端点自动切换，
+    服务端再翻回去也能无感跟上。
+    """
+    with _EP_LOCK:
+        pref = _EP_PREF["single"]
+    return (True, False) if pref else (False, True)
+
+
+def _ep_pref_mark(single: bool) -> None:
+    with _EP_LOCK:
+        _EP_PREF["single"] = single
+
+
+def _video_model_rotating(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
+    last_err: BaseException | None = None
+    # 2026-11-12 实测：两个端点（multi_video_model/v1/ 与 video_model/v1/）×
+    # 两个 host（sinfonlineb / lf）合计四种组合，当前全部回 HTTP 200 + 空体。
+    # 空体是站点侧成波出现的（曾实测 5 分钟前同一 vid 一次即回 23791 字节 JSON），
+    # 所以给 4 轮、每轮新设备号 + 两 host 交替 + 逐步退避，总耗时压在 3 秒级；
+    # 拿不到就快速失败，由上层挂后台继续试，别让播放器干等十几秒。
+    for attempt in range(4):
+        net_err = False
+        for single in _ep_modes_ordered():
+            if net_err:
+                break
+            if single:
+                endpoint = VIDEO_URL_SINGLE if attempt % 2 == 0 else VIDEO_URL_SINGLE_ALT
+            else:
+                endpoint = VIDEO_URL if attempt % 2 == 0 else VIDEO_URL_ALT
+            try:
+                model = _video_model(video_id, config, endpoint, single=single)
+                _ep_pref_mark(single)
+                return model
+            except Exception as err:
+                last_err = err
+                if isinstance(err, (requests.ConnectionError, requests.Timeout)):
+                    net_err = True
+                    break  # 断网/超时与端点无关，交给外层换 host 重试
+        try:
+            time.sleep(min(0.2 * (attempt + 1), 0.6))
+        except Exception:
+            pass
+        # 每轮换一个设备号：空体不排除是风控按设备号打的
+        device_id = str(random.randint(10**17, 10**18 - 1))
+        install_id = str(random.randint(10**17, 10**18 - 1))
+        try:
+            config = {"device_id": device_id, "install_id": install_id}
+        except (TypeError, AttributeError):
+            config = dict(config or {})
+    raise last_err if last_err is not None else HongguoPluginError("video_model 为空")
+
+
+# ===== 空体高峰期的后台重试 =====
+# 2026-11-12 实测：站点空体是成波来的（两个端点 × 两个 host 全空，持续数十秒），
+# 在播放器那一次请求里死等救不回来。失败后挂一个后台线程按秒继续试，
+# 一旦拿到非空 JSON 就把会话放进缓存，用户再点一次立刻起播。
+_WARM_LOCK = threading.Lock()
+_WARM_ACTIVE: set = set()
+_WARM_WINDOW = 180.0
+_WARM_INTERVAL = 4.0
+
+
+def _warm_burst(video_id: str, config: Mapping[str, Any], quality: str) -> None:
+    key = "%s|%s" % (video_id, quality)
+    with _WARM_LOCK:
+        if key in _WARM_ACTIVE or len(_WARM_ACTIVE) >= 2:
+            return
+        _WARM_ACTIVE.add(key)
+
+    def _run() -> None:
+        deadline = time.time() + _WARM_WINDOW
+        try:
+            while time.time() < deadline:
+                time.sleep(_WARM_INTERVAL)
+                try:
+                    _stream_session(video_id, dict(config or {}), quality)
+                except Exception:
+                    continue
+                return
+        finally:
+            with _WARM_LOCK:
+                _WARM_ACTIVE.discard(key)
+
+    try:
+        threading.Thread(target=_run, daemon=True, name="hg-warm").start()
+    except Exception:
+        with _WARM_LOCK:
+            _WARM_ACTIVE.discard(key)
+
+
 def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "1080", force: bool = False) -> "_StreamSession":
     quality = quality if quality in _QUALITY_LINE_NAME_TO_Q else "1080"
     cache_key = "%s|%s" % (video_id, quality)
@@ -1218,13 +1611,26 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
         if session is not None:
             return session
     try:
-        model = _video_model(video_id, config)
+        # 双端点双 host 择优，快速失败；空体高峰期由上层后台重试兜底
+        model = _video_model_rotating(video_id, dict(config or {}))
         _, item = _select_quality(_video_list_from_model(model), quality)
         key_seed = _key_seed_from_model(model)
         url = resolve_media_url(item, key_seed)
         spade = _spade_value(item)
-        if not url or not spade:
-            raise HongguoPluginError("播放模型缺少地址或密钥材料")
+        if not url:
+            raise HongguoPluginError("播放模型缺少地址")
+        if not spade:
+            # 这一档上游没有加密材料（gear_des_key 是 1:normal、无 encrypt_info）：
+            # 本来就是未加密直链，直通转发即可，不能再当成「缺密钥」判失败。
+            plain = _hg_plain_url_session(url, _hg_entry_size(item))
+            if plain is not None:
+                with _STREAM_LOCK:
+                    sessions = _STREAM_STATE["sessions"]
+                    while len(sessions) >= _STREAM_MAX_SESSIONS:
+                        sessions.pop(next(iter(sessions)), None)
+                    sessions[cache_key] = plain
+                return plain
+            raise HongguoPluginError("该档未加密但验不过标准编码")
         total, moov_start, moov = _fetch_moov(url)
         session = _StreamSession(
             url,
@@ -1330,8 +1736,12 @@ class _StreamHandler(BaseHTTPRequestHandler):
                 },
                 params["quality"],
             )
-        except Exception:
-            self._fail(502, b"media session failed")
+        except Exception as error:
+            # 把真实原因带回响应体：上游 video_model 返回空响应（HTTP 200、
+            # Content-Length 0）时播放器侧只看到 502，没有原因就无法判断是
+            # 站点接口关了还是本地网络问题。
+            detail = str(error).strip() or error.__class__.__name__
+            self._fail(502, ("hg media session failed: %s" % detail).encode("utf-8"))
             return
         raw_range = self.headers.get("Range") or ""
         requested = _parse_range(raw_range, session.total)
@@ -1357,14 +1767,15 @@ class _StreamHandler(BaseHTTPRequestHandler):
                 for block in session.iter_range(start, end):
                     first_block = block
                     break
-            except Exception:
+            except Exception as first_error:
                 # 会话对应的上游直链可能已过期（CDN 静默 403/短包）。强制重建
                 # 一次换新链再取首块，成功则继续；只有重建后仍失败才报 502，
                 # 避免"过一段时间后无法播放"。
                 try:
                     session = _stream_session(params["vid"], config, quality, force=True)
-                except Exception:
-                    self._fail(502, b"media session expired")
+                except Exception as second_error:
+                    reason = str(second_error).strip() or str(first_error).strip()
+                    self._fail(502, ("hg media session failed: %s" % reason).encode("utf-8"))
                     return
                 if requested:
                     refreshed = _parse_range(raw_range, session.total)
@@ -1378,8 +1789,9 @@ class _StreamHandler(BaseHTTPRequestHandler):
                     for block in session.iter_range(start, end):
                         first_block = block
                         break
-                except Exception:
-                    self._fail(502, b"media re-read failed")
+                except Exception as read_error:
+                    reason = str(read_error).strip() or read_error.__class__.__name__
+                    self._fail(502, ("hg media re-read failed: %s" % reason).encode("utf-8"))
                     return
         self.send_response(206 if requested else 200)
         self.send_header("Content-Type", "video/mp4")
@@ -3510,12 +3922,16 @@ def _device_config(config: Mapping[str, Any]) -> dict[str, str]:
         "ua": APP_UA,
     }
 
-def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
+def _video_model(video_id: str, config: Mapping[str, Any],
+                 video_url: str | None = None, sign_mode: str = "sixgod",
+                 single: bool = False) -> dict[str, Any]:
     devices = _device_config(config)
+    endpoint = video_url or (VIDEO_URL_SINGLE if single else VIDEO_URL)
     params = {
-        # 线上实测（2026-10 抓包回放）：请求串里带 iid(install_id) 会触发上游
-        # 静默拒绝——HTTP 200 但 Content-Length: 0，签名本身有效。只发
-        # device_id 即可拿到完整 video_model。切勿回加 iid。
+        # 2026-11-12 实测：multi_video_model 对带签名/不带签名、带/不带 iid 的
+        # 请求一律回 HTTP 200 + Content-Length: 0（空响应），_json_response 会
+        # 直接抛错。参数保持抓包形态（device_id + App 公共参数），接口恢复后即可
+        # 复用；iid/install_id 历史上会触发静默拒绝，不加入请求串。
         "device_id": devices["device_id"],
 
         "ac": "wifi",
@@ -3555,8 +3971,12 @@ def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
             "use_server_dns": False,
             "video_platform": 1024,
         },
-        "mixed_video_id_map": {"1004": [video_id]},
     }
+    if single:
+        # video_model/v1/（multi_ 停服后的现行接口）：顶层 video_id
+        payload["video_id"] = video_id
+    else:
+        payload["mixed_video_id_map"] = {"1004": [video_id]}
     request_headers = {
         "User-Agent": APP_UA,
         "Accept": "application/json; charset=utf-8,application/x-protobuf",
@@ -3570,8 +3990,11 @@ def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
     }
     if devices.get("cookie"):
         request_headers["Cookie"] = devices["cookie"]
+    # 端点择优：multi_ 停服只回空包时改用同主机的 video_model/v1/（请求体顶层
+    # video_id）。签名沿用 sixgod（本文件未内置海阔视界的 ladon+argus 签名材料），
+    # 接口恢复后 multi_ 与 single 都能用同一套签名打通。
     signed_headers, signed_url = _core_sixgod(
-        VIDEO_URL,
+        endpoint,
         params,
         devices,
         payload,
@@ -3602,6 +4025,9 @@ def _video_model(video_id: str, config: Mapping[str, Any]) -> dict[str, Any]:
     raw_model = entry.get("video_model") if isinstance(entry, Mapping) else None
     if raw_model is None:
         raw_model = data.get("video_model")
+    if raw_model is None and ("video_list" in data or "dynamic_video_list" in data):
+        # video_model/v1/ 可能直接把播放模型铺在 data 顶层
+        raw_model = data
     if isinstance(raw_model, str):
         try:
             raw_model = json.loads(raw_model)
@@ -3890,57 +4316,27 @@ def _search_api(key: str, page: int = 1) -> dict:
     return {}
 
 
-def _search_loader(key: str) -> dict:
-    """拉取搜索页 loaderData，失败重试。"""
-    last = {}
-    for attempt in range(3):
-        try:
-            data = _data(SITE + "/search/" + quote(str(key), safe=""))
-            page = (data.get("loaderData") or {}).get("search_(keyword)/page") or {}
-            if page.get("searchList"):
-                return page
-            last = page or last
-        except Exception:
-            pass
-        try:
-            time.sleep(0.5 * (attempt + 1))
-        except Exception:
-            pass
-    return last
+def _search_loader(key: str, page: int = 1) -> dict:
+    """搜索数据源：/api/search/result/ 带 query+page，支持真翻页。
 
+    /search/<关键词> 是纯客户端渲染页，HTML 里没有 _ROUTER_DATA，拿不到列表，
+    所以 SSR 分支只在首页兜底；不额外重试（_search_api 内部已重试）。
+    """
+    payload = _search_api(key, page)
+    if payload.get("searchList") or page > 1:
+        return payload
+    try:
+        data = _data(SITE + "/search/" + quote(str(key), safe=""))
+        ssr = (data.get("loaderData") or {}).get("search_(keyword)/page") or {}
+        if ssr.get("searchList"):
+            return ssr
+    except Exception:
+        pass
+    return payload
 
-def _search_by_keywords(keywords, page: int) -> dict:
-    """多关键词轮换：第 N 页用第 N 个关键词（循环），避免搜索无法翻页。"""
-    page = max(1, int(page or 1))
-    kws = [k for k in (keywords or []) if k]
-    if not kws:
-        kws = ["短剧"]
-    key = kws[(page - 1) % len(kws)]
-    p = _search_loader(key)
-    rows = p.get("searchList") or []
-    # 去重空 id
-    out = []
-    seen = set()
-    for x in rows:
-        it = _item(x)
-        vid = str(it.get("vod_id") or "")
-        if not vid or vid in seen:
-            continue
-        seen.add(vid)
-        out.append(it)
-    # 虚拟页数：关键词数；若站点有 totalCount 也参考
-    total = int(p.get("totalCount") or 0)
-    pagecount = max(len(kws), (total + 9) // 10 if total else len(kws))
-    return {
-        "page": page,
-        "pagecount": max(1, pagecount),
-        "limit": len(out),
-        "total": total or len(out) * pagecount,
-        "list": out,
-    }
 
 def _category_loader(page: int, q: dict) -> dict:
-    """分类页带重试；page=1 偶发空列表时多试几次。"""
+    """查询式分类页（/category?tab=...）带重试；page=1 偶发空列表时多试几次。"""
     page = max(1, int(page or 1))
     q = dict(q or {})
     if page > 1:
@@ -3961,6 +4357,79 @@ def _category_loader(page: int, q: dict) -> dict:
         except Exception:
             pass
     return last
+
+
+def _route_category_loader(route: str, page: int) -> dict:
+    """路径式分类页（/category/real-drama、/category/comic-drama ...）。
+
+    站点只在这一形态下接受 page，其它查询参数一律 404（topic 也会 404），
+    所以分页用 ?page=N；主题筛选只在查询式页生效，见 categoryContent 的分流。
+    """
+    page = max(1, int(page or 1))
+    url = SITE + "/category/" + route + ("" if page <= 1 else "?page=%d" % page)
+    try:
+        data = _data(url)
+    except Exception:
+        return {}
+    loader = data.get("loaderData") or {}
+    for key, value in loader.items():
+        if isinstance(value, Mapping) and value.get("recommendList") is not None:
+            return value
+    return {}
+
+
+def _rank_loader(route: str) -> dict:
+    """排行榜页（/rank/hot-real-drama、/rank/new-real-drama ...），单页 20 条。"""
+    try:
+        data = _data(SITE + "/rank/" + route)
+    except Exception:
+        return {}
+    loader = data.get("loaderData") or {}
+    for key, value in loader.items():
+        if isinstance(value, Mapping) and (value.get("content") or {}).get("rankList") is not None:
+            return value
+    return {}
+
+
+def _page_result(page: int, p: Mapping[str, Any]) -> dict:
+    """把 recommendList 页数据转成 TVBox 分页结果。"""
+    rows = p.get("recommendList") or []
+    page_data = p.get("pagination") or {}
+    total = int(page_data.get("total") or len(rows) or 0)
+    pagecount = int(page_data.get("totalPages") or 1) or 1
+    return {
+        "page": page,
+        "pagecount": pagecount,
+        "limit": len(rows),
+        "total": total,
+        "list": [_cat_item(x) for x in rows],
+    }
+
+
+def _rank_result(page: int, p: Mapping[str, Any]) -> dict:
+    """排行榜数据转分页结果；站点只给一页 20 条，pagecount 固定 1。"""
+    content = p.get("content") or {}
+    rows = content.get("rankList") or []
+    out = []
+    for x in rows:
+        sid = str(x.get("seriesId") or x.get("id") or "")
+        if not sid:
+            continue
+        out.append({
+            "vod_id": sid,
+            "vod_name": str(x.get("title") or x.get("name") or "未命名"),
+            "vod_pic": str(x.get("cover") or x.get("cover_image") or ""),
+            "vod_remarks": str(x.get("heatText") or x.get("primaryMetricText") or ""),
+            "vod_content": "",
+        })
+    return {
+        "page": page,
+        "pagecount": 1,
+        "limit": len(out),
+        "total": len(out),
+        "list": out,
+    }
+
 
 class Spider(_BaseSpider):
     def __init__(self):
@@ -4007,56 +4476,19 @@ class Spider(_BaseSpider):
             pass
 
     def homeContent(self, filter):
-        class_list = [
-            {"type_id": "all", "type_name": "短剧"},
-            {"type_id": "ai_comic", "type_name": "AI漫剧"},
-            {"type_id": "latest", "type_name": "最新"},
-            {"type_id": "hot", "type_name": "最热"},
-            {"type_id": "male", "type_name": "男频"},
-            {"type_id": "female", "type_name": "女频"},
-        ]
+        class_list = [{"type_id": tid, "type_name": name} for tid, (name, _route) in
+                      list(_HG_CATEGORY_ROUTES.items()) + list(_HG_RANK_ROUTES.items())]
+        # 站点只在 /category?tab=1&topic= 下生效主题筛选（真人剧库）；漫剧/AI剧
+        # 没有 tab 入口、漫画(tab=2)不收 topic，所以筛选只挂在真人剧分类上，
+        # 其余分类不放行筛选项，避免出现"选了不生效"的死筛。
         groups = [
             {"key": "topic", "name": "主题", "value": [
-                {"n": "全部", "v": ""}, {"n": "现言", "v": "cate_1021"}, {"n": "女性成长", "v": "cate_1048"},
-                {"n": "脑洞", "v": "cate_262"}, {"n": "奇幻", "v": "cate_1020"}, {"n": "玄幻", "v": "cate_1019"},
-                {"n": "古言", "v": "cate_439"}, {"n": "战神", "v": "cate_1038"}, {"n": "宫斗", "v": "cate_246"},
-                {"n": "仙侠", "v": "cate_1013"}, {"n": "权谋", "v": "cate_1047"}, {"n": "种田", "v": "cate_1180"},
-                {"n": "年代爱情", "v": "cate_1022"}, {"n": "悬疑", "v": "cate_165"}, {"n": "喜剧", "v": "cate_303"},
-                {"n": "青春", "v": "cate_297"}, {"n": "志怪", "v": "cate_1027"}, {"n": "民国爱情", "v": "cate_1025"},
-                {"n": "灵异", "v": "cate_751"}, {"n": "家国情怀", "v": "cate_1235"}, {"n": "法律", "v": "cate_1136"},
-                {"n": "刑侦", "v": "cate_1148"}, {"n": "抗战", "v": "cate_504"}, {"n": "武侠", "v": "cate_1172"},
-                {"n": "民国传奇", "v": "cate_1240"}, {"n": "求生", "v": "cate_1168"}, {"n": "动作", "v": "cate_302"},
-                {"n": "科幻", "v": "cate_1092"}, {"n": "恐怖", "v": "cate_1219"}, {"n": "商战", "v": "cate_1225"},
-            ]},
-            {"key": "background", "name": "背景", "value": [
-                {"n": "全部", "v": ""}, {"n": "现代", "v": "cate_757"}, {"n": "都市", "v": "cate_1"},
-                {"n": "古代", "v": "cate_758"}, {"n": "乡村", "v": "cate_11"}, {"n": "年代", "v": "cate_79"},
-                {"n": "架空", "v": "cate_452"}, {"n": "职场", "v": "cate_127"}, {"n": "民国", "v": "cate_390"},
-                {"n": "校园", "v": "cate_4"}, {"n": "宫廷", "v": "cate_1153"}, {"n": "荒岛", "v": "cate_1162"},
-            ]},
-            {"key": "setting", "name": "设定", "value": [
-                {"n": "全部", "v": ""}, {"n": "打脸虐渣", "v": "cate_1051"}, {"n": "大男主", "v": "cate_1207"},
-                {"n": "大女主", "v": "cate_760"}, {"n": "马甲", "v": "cate_266"}, {"n": "重生", "v": "cate_36"},
-                {"n": "穿越", "v": "cate_37"}, {"n": "系统", "v": "cate_19"}, {"n": "先婚后爱", "v": "cate_265"},
-                {"n": "家长里短", "v": "cate_862"}, {"n": "小人物", "v": "cate_1010"}, {"n": "破镜重圆", "v": "cate_475"},
-                {"n": "神豪", "v": "cate_20"}, {"n": "豪门", "v": "cate_936"}, {"n": "强者回归", "v": "cate_1045"},
-                {"n": "异能", "v": "cate_598"}, {"n": "虐恋", "v": "cate_1008"}, {"n": "传承觉醒", "v": "cate_1007"},
-                {"n": "医生", "v": "cate_487"}, {"n": "强强联合", "v": "cate_1049"}, {"n": "赘婿逆袭", "v": "cate_1044"},
-                {"n": "甜宠", "v": "cate_96"}, {"n": "娱乐圈", "v": "cate_43"}, {"n": "神医", "v": "cate_26"},
-                {"n": "青梅竹马", "v": "cate_387"}, {"n": "姐弟恋", "v": "cate_762"}, {"n": "玄学", "v": "cate_929"},
-                {"n": "追妻火葬场", "v": "cate_616"}, {"n": "业界精英", "v": "cate_1293"}, {"n": "一见钟情", "v": "cate_477"},
-                {"n": "福宝", "v": "cate_1291"}, {"n": "捞偏门", "v": "cate_1287"}, {"n": "反派主角", "v": "cate_1042"},
-                {"n": "萌宠", "v": "cate_428"}, {"n": "双向救赎", "v": "cate_1200"}, {"n": "方言", "v": "cate_1255"},
-                {"n": "白月光", "v": "cate_615"}, {"n": "灵魂互换", "v": "cate_831"}, {"n": "病娇", "v": "cate_380"},
-                {"n": "暴富", "v": "cate_1191"}, {"n": "黑道", "v": "cate_826"}, {"n": "丧尸", "v": "cate_582"},
-                {"n": "特种兵", "v": "cate_375"},
-            ]},
-            {"key": "time", "name": "时间", "value": [
-                {"n": "全部", "v": ""}, {"n": "7天内上新", "v": "1"}, {"n": "14天内上新", "v": "2"},
-                {"n": "30天内上新", "v": "3"}, {"n": "90天内上新", "v": "4"},
+                {"n": "全部", "v": ""}, {"n": "玄幻", "v": "cate_1019"}, {"n": "奇幻", "v": "cate_1020"},
+                {"n": "科幻", "v": "cate_1092"}, {"n": "志怪", "v": "cate_1027"}, {"n": "喜剧", "v": "cate_303"},
+                {"n": "青春", "v": "cate_297"},
             ]},
         ]
-        filter_dict = {c["type_id"]: groups for c in class_list}
+        filter_dict = {"drama": groups, "all": groups}
         home_list = []
         try:
             data = _data(SITE + "/")
@@ -4089,99 +4521,75 @@ class Spider(_BaseSpider):
         except Exception:
             return {"list": []}
 
-    def _query(self, pg, q=None):
-        try:
-            pg = max(1, int(pg))
-        except (TypeError, ValueError):
-            pg = 1
-        if q is None:
-            q = {"tab": "1", "sort_type": "1"}
-        return _category_loader(pg, q)
-    def categoryContent(self, tid, pg, filter, extend):
-        try:
-            page = max(1, int(pg))
-        except (TypeError, ValueError):
-            page = 1
-        # 漫剧 / AI漫剧：官网搜索不支持真翻页，多关键词轮换
-        if tid in ("comic", "manju", "漫剧"):
-            try:
-                p = _category_loader(page, {"tab": "2", "sort_type": "1"})
-                rows = p.get("recommendList") or []
-                if rows:
-                    page_data = p.get("pagination") or {}
-                    return {
-                        "page": page,
-                        "pagecount": int(page_data.get("totalPages") or 1),
-                        "limit": len(rows),
-                        "total": int(page_data.get("total") or len(rows)),
-                        "list": [_cat_item(x) for x in rows],
-                    }
-            except Exception:
-                pass
-            return _search_by_keywords(_MANJU_KEYWORDS, page)
-        if tid in ("ai_comic", "ai_manju", "AI漫剧", "ai漫剧"):
-            return _search_by_keywords(_AI_MANJU_KEYWORDS, page)
-        q = {"tab": "1", "sort_type": "1"}
-        if tid == "latest":
-            q["sort_type"] = "2"
-        elif tid == "hot":
-            q["sort_type"] = "1"
-        elif tid == "male":
-            q["gender"] = "1"
-        elif tid == "female":
-            q["gender"] = "2"
+    @staticmethod
+    def _extend_dict(extend) -> dict:
         if isinstance(extend, str) and extend:
             try:
                 extend = json.loads(extend)
             except Exception:
                 extend = {}
-        if isinstance(extend, dict):
-            for k, v in extend.items():
-                if v and str(v) not in ("", "all", "0"):
-                    q[k] = str(v)
-        p = _category_loader(page, q)
-        rows = p.get("recommendList") or []
-        page_data = p.get("pagination") or {}
-        return {
-            "page": page,
-            "pagecount": int(page_data.get("totalPages") or 1),
-            "limit": len(rows),
-            "total": int(page_data.get("total") or len(rows)),
-            "list": [_cat_item(x) for x in rows],
-        }
+        if not isinstance(extend, dict):
+            return {}
+        out = {}
+        for k, v in extend.items():
+            if v is None:
+                continue
+            text = str(v).strip()
+            if text and text not in ("all", "0"):
+                out[str(k)] = text
+        return out
+
+    def categoryContent(self, tid, pg, filter, extend):
+        try:
+            page = max(1, int(pg))
+        except (TypeError, ValueError):
+            page = 1
+        tid = str(tid or "")
+        extend = self._extend_dict(extend)
+        topic = extend.get("topic") or ""
+
+        # 排行榜（最热/最新）：站点单页 20 条，不翻页
+        rank_key = _HG_RANK_ALIAS.get(tid) or (tid if tid in _HG_RANK_ROUTES else "")
+        if rank_key:
+            return _rank_result(page, _rank_loader(_HG_RANK_ROUTES[rank_key][1]))
+
+        # 内容通道：真人剧/漫剧/AI剧/漫画
+        route_key = _HG_CATEGORY_ALIAS.get(tid) or (tid if tid in _HG_CATEGORY_ROUTES else "")
+        if route_key:
+            route = _HG_CATEGORY_ROUTES[route_key][1]
+            # 真人剧/漫画有等价的查询式页（tab=1/tab=2），分页与主题筛选都在那生效，
+            # 走查询式；漫剧/AI剧 没有 tab 入口，只能用路径页（只认 page，站点没有
+            # 分通道的主题筛选，筛选项不在这两个分类上出现）。
+            if route in ("real-drama", "comic"):
+                q = {"tab": "1" if route == "real-drama" else "2"}
+                if topic:
+                    q["topic"] = topic
+                return _page_result(page, _category_loader(page, q))
+            return _page_result(page, _route_category_loader(route, page))
+
+        # 查询式分类页：tab(1=真人剧/2=漫画) + topic
+        q = {"tab": "2" if tid in ("comic", "漫画") else "1"}
+        if topic:
+            q["topic"] = topic
+        return _page_result(page, _category_loader(page, q))
+
     def searchContent(self, key, quick=False, pg="1"):
         try:
             page = max(1, int(pg))
         except (TypeError, ValueError):
             page = 1
         key = str(key or "").strip() or "短剧"
-        # AI/漫剧相关搜索也走关键词轮换，提升翻页体验
-        low = key.lower()
-        if key in ("AI漫剧", "ai漫剧") or "ai漫" in low:
-            return _search_by_keywords(_AI_MANJU_KEYWORDS, page)
-        if key in ("漫剧", "动漫短剧"):
-            return _search_by_keywords(_MANJU_KEYWORDS, page)
-
-        # 优先走官网搜索 API（真翻页）；失败/空结果再回退旧 loader
-        p = _search_api(key, page)
-        if p.get("searchList"):
-            rows = p["searchList"]
-            total = int(p.get("totalCount") or 0)
-            pagecount = int(p.get("totalPages") or 0)
-            return {
-                "page": page,
-                "pagecount": max(1, pagecount),
-                "limit": len(rows),
-                "total": total or len(rows),
-                "list": [_item(x) for x in rows],
-            }
-        p = _search_loader(key)
+        # 官网搜索 API 支持真翻页；空结果/失败再回退 SSR。AI漫剧/漫剧 只是普通
+        # 关键词，站点不按词过滤，也不再需要关键词轮换（那会打乱翻页语义）。
+        p = _search_loader(key, page)
         rows = p.get("searchList") or []
         total = int(p.get("totalCount") or len(rows) or 0)
-        # 官网搜索基本只有一页有效结果
+        # 搜索 API 真分页（实测 214 条 / 22 页，每页 10 条）；totalPages 在越界
+        # 请求时会回显请求页码，不可信，优先用 totalCount 推算。
+        pagecount = (total + 9) // 10 if total else int(p.get("totalPages") or 0)
         return {
             "page": page,
-            "pagecount": 1 if not total else max(1, min(10, (total + 9) // 10)),
+            "pagecount": max(1, pagecount),
             "limit": len(rows),
             "total": total or len(rows),
             "list": [_item(x) for x in rows],
@@ -4189,10 +4597,24 @@ class Spider(_BaseSpider):
 
 
     def detailContent(self, ids):
-        sid = str(ids[0] if isinstance(ids, (list, tuple)) else ids)
+        try:
+            sid = str(ids[0] if isinstance(ids, (list, tuple)) else ids)
+        except IndexError:
+            # ids 为空集合：壳在收藏/历史串异常时会传进来，回空列表而不是抛 IndexError
+            return {"list": []}
         sid = sid.replace("hg-series-v1:", "")
-        p = ((_data(SITE + "/detail?series_id=" + quote(sid, safe="")).get("loaderData") or {}).get("detail_page") or {})
+        if not sid:
+            return {"list": []}
+        try:
+            data = _data(SITE + "/detail?series_id=" + quote(sid, safe=""))
+        except Exception:
+            # series_id 过期/下架/拼错时站点回 500 或 404，_page 会把 HTTP 错误往外抛。
+            # 详情页拿不到就回空列表，让 App 显示「无详情」而不是整个源崩掉。
+            return {"list": []}
+        p = (data.get("loaderData") or {}).get("detail_page") or {}
         s = p.get("seriesDetail") or {}
+        if not s and not p:
+            return {"list": []}
         vids = s.get("vid_list") or []
         actors = [str(x.get("nickname")) for x in (s.get("celebrities") or []) if isinstance(x, dict) and x.get("nickname")]
         play_from = []
@@ -4202,19 +4624,20 @@ class Spider(_BaseSpider):
                 "第%d集%s%s%s%s" % (i + 1, "$", EPISODE_PREFIX, q + ":", str(v))
                 for i, v in enumerate(vids)
             )
-            play_from.append(line_name)
+            play_from.append("红果" + line_name)
             play_url.append(eps)
+        if not vids:
+            # 无 vid_list 时给一条占位，避免播放分区为空导致详情页看不到选集
+            play_from = ["红果" + name for _q, name in _HG_QUALITY_LINES]
+            play_url = ["" for _q, _n in _HG_QUALITY_LINES]
         return {"list": [{"vod_id": sid, "vod_name": str(s.get("series_name") or ""), "vod_pic": str(s.get("series_cover") or ""), "vod_year": "", "vod_area": "", "vod_director": "", "vod_actor": ",".join(actors), "vod_content": str(s.get("series_intro") or ""), "vod_remarks": str(s.get("episode_right_text") or ""), "vod_play_from": "$$$".join(play_from), "vod_play_url": "$$$".join(play_url)}]}
+
     def playerContent(self, flag, id, vipFlags=None):
-        # 从线路名（flag，如“红果超清/红果高清”）与集 token 双路解析清晰度。
-        # token 已是 'hg-episode-v1:<q>:<vid>'，flag 用于旧壳只传线路名时兜底。
+        # 壳传进来的 id 是整条播放值 '第1集$hg-episode-v1:1080:<vid>'，
+        # _split_episode_token 负责剥掉集名与协议头；清晰度以 token 为准，
+        # 老 token（不带清晰度）才用线路名兜底。
         token_q, vid = _split_episode_token(id)
-        line_q = "1080"
-        for name_key, candidate_q in _QUALITY_LINE_NAME_TO_Q.items():
-            if name_key in str(flag or ""):
-                line_q = candidate_q
-                break
-        q = line_q if token_q == "1080" and str(flag) else token_q
+        q = token_q or _flag_quality(flag) or "1080"
         q = q if q in _QUALITY_LINE_NAME_TO_Q else "1080"
         if not str(vid).isdigit():
             return {
@@ -4224,29 +4647,70 @@ class Spider(_BaseSpider):
                 "url": SITE + "/",
                 "header": {"User-Agent": UA},
             }
-        # 取流优先级：本机 Range 流服务 > 壳代理。
+        # 取流优先级：官网公开取流直链 > 本机 Range 流服务 > 上游直通直链 > 壳代理。
+        # 公开取流（Web 接口 fallback-play-info）返回的是一条明文 mp4 直链：
+        # 完整时长、avc1+mp4a、CDN 认 Range，播放器自己 seek，不经过本机解密，
+        # 也不需要 device_id/签名。缺点是固定 360P（见 _hg_public_play 注释）。
+        # 只有它失败时才走下面的 App 取流 + CENC 解密（接口恢复后可选更高清晰度）。
+        public = _hg_public_play(vid)
+        if public.get("main_url"):
+            return {
+                "parse": 0,
+                "jx": 0,
+                "playUrl": "",
+                "url": public["main_url"],
+                "header": {"User-Agent": UA},
+            }
         # 壳代理（fongmi / OK影视 的 /proxy?do=py）实测会忽略 Range：对 bytes=0-1023
         # 也回 200 + 整片 + chunked，既无 Content-Range 也无 Accept-Ranges，且必须
         # 等整片下载 + CENC 解密完成后才吐首字节（单集 12~17MB，实测 8.7s / 16.3s，
         # 超过播放器默认 8s 读超时）。首集常因缓存或重试侥幸起播，切到第二集时播放器
         # 按新 URL 重新请求即超时失败，表现为“第 1 集能放、第 2 集不能放”。
         # 本机流服务支持 206 / Content-Range / Accept-Ranges，首字节约 1s，切集稳定。
-        # 会话构建（取 video_model + 拉 moov）在冷启动时约 3~18s，若等到播放器连上来
-        # 才建会话，响应头会被拖延到读超时。这里先异步预热会话，让播放器连接时命中缓存。
-        def _warm_session():
+        # 会话构建（取 video_model + 拉 moov）在冷启动时约 3~18s：本机流服务起不来时
+        # 也不能让播放器干等，所以先同步取一次会话（拿不到就交给后台预热重试），
+        # 拿到会话再决定交哪条 URL：加密路走本机 Range 解密服务，未加密直通路在
+        # bind 失败时直接把上游 https 直链交给播放器自己发 Range。
+        cfg = {
+            "device_id": self.device_id or "",
+            "install_id": self.install_id or "",
+        }
+
+        # 同步取会话：命中缓存立即返回；未命中则真正取一次。
+        # 失败不抛——空体高峰期由下面的后台 _warm_burst 按秒重试兜底。
+        plain_url = ""
+        try:
+            session = _stream_session(vid, cfg, q)
+        except Exception:
+            session = None
             try:
-                _stream_session(vid, {
-                    "device_id": self.device_id or "",
-                    "install_id": self.install_id or "",
-                }, q)
+                _warm_burst(vid, cfg, q)
             except Exception:
                 pass
+        if isinstance(session, _PlainSession) and session.url:
+            plain_url = session.url
+
+        def _try_start_server(wait):
+            # 启本机服务对弹幕(直通路)/中转(CENC路)是加分项而非前提；宿主环境禁止
+            # bind 127.0.0.1 时 _start_stream_server 可能挂起，放线程里限时等，
+            # 拿不到端口就放弃，绝不让播放器干等。
+            box = {}
+
+            def _run():
+                try:
+                    box["port"] = _start_stream_server()
+                except Exception:
+                    pass
+
+            thread = threading.Thread(target=_run, daemon=True)
+            thread.start()
+            thread.join(float(wait))
+            return int(box.get("port") or 0)
+
+        # 直通流（上游本来就是标准 hvc1/avc1 未加密）：本机服务起不来时可以直接把
+        # 上游 https 直链交给播放器，播放器自己发 Range，不会卡在“正在获取播放信息”。
         try:
-            threading.Thread(target=_warm_session, daemon=True).start()
-        except Exception:
-            pass
-        try:
-            port = _start_stream_server()
+            port = _try_start_server(1.5 if plain_url else 3.0)
         except Exception:
             port = 0
         if port:
@@ -4264,6 +4728,18 @@ class Spider(_BaseSpider):
                 "playUrl": "",
                 "url": "http://127.0.0.1:%d/hg.mp4?%s" % (port, query),
                 "header": {"User-Agent": UA},
+            }
+        # 本机服务不可用（宿主禁 bind 127.0.0.1）：直通流直接交上游直链。
+        if plain_url:
+            return {
+                "parse": 0,
+                "jx": 0,
+                "playUrl": "",
+                "url": plain_url,
+                "header": {
+                    "User-Agent": MEDIA_UA,
+                    "Referer": "https://novel.snssdk.com/",
+                },
             }
         # 回退：壳代理（保留壳自带的 do=py，不要覆盖 do）
         proxy = ""
@@ -4307,7 +4783,7 @@ class Spider(_BaseSpider):
         return self.localProxy(param)
 
     def localProxy(self, param):
-        """壳本地代理：优先读缓存；无原生 AES 时避免一上来就解 1080 整集导致超时失败。"""
+        """壳本地代理：先走官网公开取流，再走本机缓存 + App 取流 + CENC 解密。"""
         import traceback
         param = param or {}
         vid = str(
@@ -4324,6 +4800,24 @@ class Spider(_BaseSpider):
                     break
         if not vid:
             return [400, "text/plain; charset=utf-8", b"missing vid"]
+
+        # 官网公开取流：整块返回（壳代理不认 Range，至少能完整放一集）
+        try:
+            public = _hg_public_play(vid)
+        except Exception:
+            public = {}
+        if public.get("main_url"):
+            try:
+                body = _multi_download(
+                    public["main_url"],
+                    headers={"User-Agent": UA},
+                    timeout=120,
+                    workers=4,
+                )
+                if body and (b"ftyp" in body[:64] or b"moov" in body[:4096]):
+                    return [200, "video/mp4", body]
+            except Exception:
+                pass
 
         try:
             cfg = {
@@ -4354,10 +4848,10 @@ class Spider(_BaseSpider):
                 primary = quals
             for q in primary:
                 cached = _hg_cache_get(vid, q)
-                if cached:
+                if cached and _hg_cached_ok(cached):
                     return [200, "video/mp4", cached]
 
-            model = _video_model(vid, cfg)
+            model = _video_model_rotating(vid, cfg)
             rows = _video_list_from_model(model)
             if not rows:
                 return [500, "text/plain; charset=utf-8", b"empty video list"]
@@ -4367,7 +4861,7 @@ class Spider(_BaseSpider):
                 try:
                     # 再查一次该清晰度缓存（model 解析后）
                     cached = _hg_cache_get(vid, wanted)
-                    if cached:
+                    if cached and _hg_cached_ok(cached):
                         return [200, "video/mp4", cached]
 
                     _, item = _select_quality(rows, wanted)
@@ -4406,6 +4900,11 @@ class Spider(_BaseSpider):
                     plain = decrypt_mp4_cenc(body, derive_content_key(spade))
                     if len(plain) < 64 or (b"ftyp" not in plain[:64] and b"moov" not in plain[:4096]):
                         last_err = "bad mp4 after decrypt q=%s" % wanted
+                        continue
+                    # 视轨校验：个别清晰度解出来只有音轨，换下一个清晰度，避免播出「只有声音」的片
+                    _mo, _ms = _find_box(memoryview(plain), b"moov", 0)
+                    if _mo >= 0 and _ms > 8 and not _moov_has_video_track(bytes(plain[_mo : _mo + _ms])):
+                        last_err = "no video track q=%s" % wanted
                         continue
                     try:
                         _hg_cache_put(vid, wanted, plain)
