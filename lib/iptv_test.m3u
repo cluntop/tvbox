@@ -505,8 +505,6 @@ https://cdn8.163189.xyz/live/lhkt/stream.m3u8$LR•IPV4
 https://cdn8.163189.xyz/live/lhjd/stream.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="龙华偶像" tvg-name="龙华偶像" group-title="港澳台",龙华偶像
 https://cdn8.163189.xyz/live/lhox/stream.m3u8$LR•IPV4
-#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="港澳台",中视
-https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="龙华戏剧" tvg-name="龙华戏剧" group-title="港澳台",龙华戏剧
 https://cdn8.163189.xyz/live/lhxj/stream.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="凤凰卫视中文台" tvg-name="凤凰卫视中文台" group-title="港澳台",凤凰卫视中文台
@@ -1275,6 +1273,8 @@ https://cdn.qd.je/163189/ccm2$LR•IPV4•5『线路4』
 https://cdn.qd.je/163189/jtyh$LR•IPV4•5『线路5』
 #EXTINF:-1 tvg-id="TVB1" tvg-name="TVB1" group-title="港澳台📶",TVB1
 https://cdn.qd.je/163189/tvb1$LR•IPV4
+#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="台湾台📶",中视HD
+https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
 http://37.49.224.5/stream/12/index.m3u8$LR•IPV4•30『线路1』
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
