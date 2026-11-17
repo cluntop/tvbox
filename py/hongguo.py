@@ -302,12 +302,50 @@ _HG_RANK_ROUTES = {
     "hot_drama": ("最热·真人剧", "hot-real-drama"),
     "new_drama": ("最新·真人剧", "new-real-drama"),
     "hot_comic_drama": ("最热·漫剧", "hot-comic-drama"),
+    "new_comic_drama": ("最新·漫剧", "new-comic-drama"),
     "hot_ai_drama": ("最热·AI剧", "hot-ai-drama"),
+    "new_ai_drama": ("最新·AI剧", "new-ai-drama"),
+    "hot_all": ("最热·全部", "hot-drama"),
+    "new_all": ("最新·全部", "new-drama"),
 }
 _HG_RANK_ALIAS = {
     "hot": "hot_drama",
     "latest": "new_drama",
+    "hot_comic": "hot_comic_drama",
+    "new_comic": "new_comic_drama",
+    "hot_ai": "hot_ai_drama",
+    "new_ai": "new_ai_drama",
 }
+
+# ---------------------------------------------------------------- App API
+# 来源：红果免费短剧 App(com.phoenix.read 7.4.5.32) dex 路由表 + 实机签名调用。
+#   POST /novel/player/album_detail/v1/   body {"album_id": "<series_id>"}
+#       -> code=0，免登录，返回封面/简介/热度/榜单标签。
+#   POST /novel/player/video_detail/v1/   body {"series_id": "<series_id>"}
+#       -> code=0，免登录，返回完整分集表（vid / vid_index / duration /
+#          disable_play / vertical 竖屏标记）。
+#   POST /novel/player/multi_video_model/{v1, :dr_scene/v1}/
+#       -> 取流模型（多清晰度 + CENC 密钥）。实测当前一律 HTTP 200 空体，已停服；
+#          保留签名实现，接口恢复即可直接取用。
+#   POST /novel/player/multi_video_detail/{v1, dynamic_data/v1, :dr_scene/v1}/
+#       -> 实测需 series_ids 之外的额外字段，当前返回参数错误；保留路径备用。
+#   GET  /app/book/album/list/v1/ | /app/book/album/get_video_list/v1/
+#      | /app/book/album/search_video_list/v1/ | /app/book/category_list/v0/
+#      | /app/book/label_list/v0/
+#       -> App 分类/剧集/搜索接口，实测需登录态（code=101「请先进行登录」）。
+_HG_APP_API_HOSTS = (
+    "https://api5-normal-sinfonlineb.fqnovel.com",
+    "https://api5-normal-lf.fqnovel.com",
+)
+_HG_APP_ALBUM_DETAIL = "/novel/player/album_detail/v1/"
+_HG_APP_VIDEO_DETAIL = "/novel/player/video_detail/v1/"
+_HG_APP_MULTI_VIDEO_MODEL = "/novel/player/multi_video_model/v1/"
+_HG_APP_MULTI_VIDEO_DETAIL = "/novel/player/multi_video_detail/v1/"
+_HG_APP_ALBUM_LIST = "/app/book/album/list/v1/"
+_HG_APP_ALBUM_VIDEO_LIST = "/app/book/album/get_video_list/v1/"
+_HG_APP_ALBUM_SEARCH = "/app/book/album/search_video_list/v1/"
+_HG_APP_CATEGORY_LIST = "/app/book/category_list/v0/"
+_HG_APP_LABEL_LIST = "/app/book/label_list/v0/"
 
 
 # ---- 本机解密缓存 + 自动清理 ----
@@ -520,14 +558,29 @@ def _hg_plain_url_session(url: str, size: int = 0) -> Any:
 
 
 def _hg_cached_ok(body: Any) -> bool:
-    """旧的整集缓存可能是 bvc2（黑屏有声），吐出去之前先验一下视轨编码。"""
+    """旧的整集缓存可能是 bvc2（黑屏有声），吐出去之前先验一下视轨编码。
+
+    moov 里音频轨/视频轨的先后不固定（实测有 mp4a 在前），只认第一个 stsd 会把
+    可播的 avc1/hvc1 误判成音轨。这里扫全部 stsd：只要有一个视频类样本条目是
+    系统可解编码（avc1/hvc1/hev1/avc3）就放行；全是 bvc2/encv 之类才判失败。
+    """
     try:
         if not body:
             return False
-        i = bytes(body).find(b"stsd")
-        if i < 0:
+        blob = bytes(body)
+        index = 0
+        seen = False
+        while True:
+            position = blob.find(b"stsd", index)
+            if position < 0:
+                break
+            seen = True
+            if blob[position + 16 : position + 20] in _DECODABLE_ENTRIES:
+                return True
+            index = position + 4
+        if not seen:
             return True
-        return bytes(body)[i + 16 : i + 20] in _DECODABLE_ENTRIES
+        return _hg_moov_fourcc(blob) in _DECODABLE_ENTRIES
     except Exception:
         return True
 
@@ -1150,6 +1203,22 @@ def decrypt_mp4_cenc(data: bytes, content_key: bytes) -> bytes:
 
 MEDIA_HEADERS = {"User-Agent": MEDIA_UA, "Referer": "https://novel.snssdk.com/"}
 
+# ===== 空体/取流失败的短时负缓存 =====
+# 2026-11-12 真机日志：VIP 集连点 3 个清晰度，每次 playerContent 都同步等一遍
+# 完整取流（3~18s）才失败，播放器侧只看到 502，用户体感就是"点了没反应"。
+# 站点空体是成波出现的（一次失败多半意味着接下来十几秒也拿不到），所以把
+# 「刚刚失败过」的 vid|q 记下来，短时间内（_STREAM_FAIL_TTL）再点就直接快速失败，
+# 不再让播放器干等；同时保证 _warm_burst 仍在后台按秒重试，接口一恢复就能播。
+# 这与参考实现里弹幕子系统的 _DM_FAIL_TTL 是同一种"失败短存、成功长存"的思路。
+_STREAM_FAIL_TTL = 12.0
+_STREAM_STATE: dict[str, Any] = {
+    "port": 0,
+    "server": None,
+    "sessions": {},
+    "inflight": {},
+    "failed": {},
+}
+
 _STREAM_PORT_RANGE = (10010, 10030)
 _STREAM_CHUNK = 1 << 20
 _STREAM_HEAD_PROBE = 1 << 16
@@ -1159,8 +1228,46 @@ _STREAM_INFLIGHT_WAIT = 60
 # 上游 CDN 直链通常在 url_expire 前约 2~3 小时有效；到期前留 5 分钟余量
 # 主动判死会话，让下一次请求重新取 video_model 换新链，避免"过一段时间后"502。
 _STREAM_URL_EXPIRE_MARGIN = 300
-_STREAM_STATE: dict[str, Any] = {"port": 0, "server": None, "sessions": {}, "inflight": {}}
 _STREAM_LOCK = threading.RLock()
+
+
+def _stream_fail_mark(video_id: str, quality: str) -> None:
+    """记一次取流失败（带 TTL 的负缓存）。"""
+    key = "%s|%s" % (video_id, quality)
+    try:
+        with _STREAM_LOCK:
+            failed = _STREAM_STATE.setdefault("failed", {})
+            failed[key] = time.time()
+            # 顺手裁剪：常驻进程的 py 可能连跑几周，这张表不能无限涨
+            if len(failed) > 64:
+                cutoff = time.time() - _STREAM_FAIL_TTL
+                for k in [k for k, v in failed.items()
+                          if not isinstance(v, (int, float)) or v < cutoff]:
+                    failed.pop(k, None)
+                while len(failed) > 64:
+                    try:
+                        failed.pop(next(iter(failed)), None)
+                    except StopIteration:
+                        break
+    except Exception:
+        pass
+
+
+def _stream_fail_recent(video_id: str, quality: str) -> bool:
+    """这个 vid|q 是不是刚刚才失败过（在 TTL 内）。"""
+    key = "%s|%s" % (video_id, quality)
+    try:
+        with _STREAM_LOCK:
+            failed = _STREAM_STATE.get("failed") or {}
+            when = failed.get(key)
+            if not isinstance(when, (int, float)):
+                return False
+            if time.time() - when > _STREAM_FAIL_TTL:
+                failed.pop(key, None)
+                return False
+            return True
+    except Exception:
+        return False
 
 
 def _toplevel_boxes(buf: bytes) -> list[tuple[int, int, bytes]]:
@@ -1567,7 +1674,10 @@ def _warm_burst(video_id: str, config: Mapping[str, Any], quality: str) -> None:
             while time.time() < deadline:
                 time.sleep(_WARM_INTERVAL)
                 try:
-                    _stream_session(video_id, dict(config or {}), quality)
+                    # force=True：绕开 _stream_fail_recent 的短时负缓存。
+                    # 后台重试的意义正是在负缓存窗口内继续试，一等到接口恢复
+                    # 就写进 sessions，用户再点一次立刻起播。
+                    _stream_session(video_id, dict(config or {}), quality, force=True)
                 except Exception:
                     continue
                 return
@@ -1595,6 +1705,11 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
             session = None
     if session is not None:
         return session
+    if not force and _stream_fail_recent(video_id, quality):
+        # 刚刚才失败过（空体高峰期）：不再让这一次请求白等 3~18s。
+        # 后台 _warm_burst 仍在按秒重试，接口一恢复就会写进 sessions，
+        # 用户再点一次立刻起播。
+        raise HongguoPluginError("上游取流仍在空体窗口（%ss 内已失败）" % _STREAM_FAIL_TTL)
     # 预热线程与播放器可能同时请求同一集；用 in-flight 事件去重，
     # 避免重复拉 video_model 与 moov（冷启动 3~18s，重复会叠加首字节延迟）。
     with _STREAM_LOCK:
@@ -1646,6 +1761,11 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
                 sessions.pop(next(iter(sessions)), None)
             sessions[cache_key] = session
         return session
+    except BaseException:
+        # 记一次失败（带 TTL 的负缓存），让紧接着的重复点击快速失败，
+        # 不再让播放器白等一遍完整取流。恢复后 _warm_burst 会写回 sessions。
+        _stream_fail_mark(video_id, quality)
+        raise
     finally:
         if leader:
             with _STREAM_LOCK:
@@ -1712,6 +1832,27 @@ class _StreamHandler(BaseHTTPRequestHandler):
         except OSError:
             pass
 
+    def _fail_session(self, params: dict, error: BaseException) -> None:
+        """会话建不起来：把真实原因回给播放器，并挂后台重试。
+
+        本机服务路径（playerContent 交了 127.0.0.1 URL）下，播放器只会看到
+        502。若失败后不挂 _warm_burst，这条路径就完全不会有后台重试——
+        playerContent 里挂的那次只属于它自己的那次同步尝试。
+        """
+        detail = str(error).strip() or error.__class__.__name__
+        try:
+            _warm_burst(
+                params["vid"],
+                {
+                    "device_id": params["device_id"],
+                    "install_id": params["install_id"],
+                },
+                params["quality"],
+            )
+        except Exception:
+            pass
+        self._fail(502, ("hg media session failed: %s" % detail).encode("utf-8"))
+
     def do_HEAD(self) -> None:  # noqa: N802 - 标准库回调命名
         self._serve(body=False)
 
@@ -1739,9 +1880,8 @@ class _StreamHandler(BaseHTTPRequestHandler):
         except Exception as error:
             # 把真实原因带回响应体：上游 video_model 返回空响应（HTTP 200、
             # Content-Length 0）时播放器侧只看到 502，没有原因就无法判断是
-            # 站点接口关了还是本地网络问题。
-            detail = str(error).strip() or error.__class__.__name__
-            self._fail(502, ("hg media session failed: %s" % detail).encode("utf-8"))
+            # 站点接口关了还是本地网络问题。同时挂 _warm_burst 后台重试。
+            self._fail_session(params, error)
             return
         raw_range = self.headers.get("Range") or ""
         requested = _parse_range(raw_range, session.total)
@@ -1775,7 +1915,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
                     session = _stream_session(params["vid"], config, quality, force=True)
                 except Exception as second_error:
                     reason = str(second_error).strip() or str(first_error).strip()
-                    self._fail(502, ("hg media session failed: %s" % reason).encode("utf-8"))
+                    self._fail_session(params, second_error)
                     return
                 if requested:
                     refreshed = _parse_range(raw_range, session.total)
@@ -4431,13 +4571,395 @@ def _rank_result(page: int, p: Mapping[str, Any]) -> dict:
     }
 
 
+
+def _hg_app_sign_params(devices: dict) -> dict:
+    """App 公共参数（与 _video_model 一致）。"""
+    return {
+        "device_id": devices.get("device_id") or "",
+        "ac": "wifi",
+        "channel": "update_64",
+        "aid": "8662",
+        "app_name": "novelread",
+        "version_code": "71332",
+        "version_name": "7.1.3.32",
+        "device_platform": "android",
+        "os": "android",
+        "ssmix": "a",
+        "device_type": "25053RT47C",
+        "device_brand": "Redmi",
+        "language": "zh",
+        "os_api": "36",
+        "os_version": "16",
+        "manifest_version_code": "71332",
+        "resolution": "1280*2772",
+        "dpi": "520",
+        "update_version_code": "71332",
+        "host_abi": "arm64-v8a",
+        "dragon_device_type": "phone",
+        "pv_player": "71332",
+        "compliance_status": "0",
+        "need_personal_recommend": "1",
+        "player_so_load": "1",
+        "is_android_pad_screen": "0",
+    }
+
+
+def _hg_app_signed_post(path: str, body: dict, config: dict, timeout: int = 25) -> dict:
+    """带 App 签名（sixgod）调用 App 接口。video_detail 实测必须签名才有数据。"""
+    try:
+        devices = _device_config(config)
+    except Exception:
+        devices = {
+            "device_id": str(config.get("device_id") or ""),
+            "install_id": str(config.get("install_id") or ""),
+            "ua": APP_UA,
+        }
+    params = _hg_app_sign_params(devices)
+    headers = {
+        "User-Agent": APP_UA,
+        "Accept": "application/json; charset=utf-8,application/x-protobuf",
+        "Content-Type": "application/json; charset=UTF-8",
+        "x-xs-from-web": "0",
+        "x-ss-req-ticket": str(int(time.time() * 1000)),
+        "x-tt-request-tag": "t=0;n=0",
+        "sdk-version": "2",
+        "passport-sdk-version": "50561",
+        "x-vc-bdturing-sdk-version": "3.7.2.cn",
+    }
+    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    last = ""
+    for host in _HG_APP_API_HOSTS:
+        for attempt in range(2):
+            try:
+                signed_headers, signed_url = _core_sixgod(
+                    host + path, params, devices, body, headers
+                )
+                response = requests.post(
+                    signed_url,
+                    headers=signed_headers,
+                    data=payload,
+                    timeout=timeout,
+                )
+                if not response.content:
+                    last = "empty response"
+                    continue
+                try:
+                    data = response.json()
+                except Exception:
+                    last = "invalid json"
+                    continue
+                if isinstance(data, dict) and data.get("code") == 0:
+                    return data
+                last = "code=%s %s" % (data.get("code"), str(data.get("message") or "")[:40])
+            except Exception as error:
+                last = "%s: %s" % (error.__class__.__name__, error)
+            try:
+                time.sleep(0.4 * (attempt + 1))
+            except Exception:
+                pass
+    try:
+        print("hg app api failed: %s (%s)" % (path, last))
+    except Exception:
+        pass
+    return {}
+
+
+_HG_APP_DEVICE = {"device_id": "", "install_id": ""}
+
+
+def _hg_app_post(path: str, body: dict, config: dict | None = None, timeout: int = 25) -> dict:
+    """调用红果 App 真实接口（album_detail 免登录；video_detail 走签名分支）。"""
+    if path == _HG_APP_VIDEO_DETAIL:
+        use = dict(_HG_APP_DEVICE)
+        if isinstance(config, dict):
+            for key in ("device_id", "install_id"):
+                if config.get(key):
+                    use[key] = str(config[key])
+        return _hg_app_signed_post(path, body, use, timeout)
+    payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    headers = {
+        "User-Agent": APP_UA,
+        "Accept": "application/json; charset=utf-8",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+    last = ""
+    for host in _HG_APP_API_HOSTS:
+        for attempt in range(2):
+            try:
+                response = requests.post(
+                    host + path,
+                    data=payload,
+                    headers=headers,
+                    timeout=timeout,
+                )
+                if not response.content:
+                    last = "empty response"
+                    continue
+                try:
+                    data = response.json()
+                except Exception:
+                    last = "invalid json"
+                    continue
+                if isinstance(data, dict) and data.get("code") == 0:
+                    return data
+                last = "code=%s %s" % (data.get("code"), str(data.get("message") or "")[:40])
+            except Exception as error:
+                last = "%s: %s" % (error.__class__.__name__, error)
+            try:
+                time.sleep(0.4 * (attempt + 1))
+            except Exception:
+                pass
+    try:
+        print("hg app api failed: %s (%s)" % (path, last))
+    except Exception:
+        pass
+    return {}
+
+
+def _hg_app_album_detail(series_id: str, config: dict | None = None) -> dict:
+    """App album_detail：封面/简介/热度/榜单标签（免登录，code=0）。"""
+    data = _hg_app_post(_HG_APP_ALBUM_DETAIL, {"album_id": str(series_id)}, config)
+    if not data:
+        return {}
+    album = ((data.get("data") or {}).get("album_data") or {})
+    return album if isinstance(album, dict) else {}
+
+
+def _hg_app_video_detail(series_id: str, config: dict | None = None) -> dict:
+    """App video_detail：完整分集表（vid / vid_index / duration / disable_play / vertical）。"""
+    data = _hg_app_post(_HG_APP_VIDEO_DETAIL, {"series_id": str(series_id)}, config)
+    if not data:
+        return {}
+    video = ((data.get("data") or {}).get("video_data") or {})
+    return video if isinstance(video, dict) else {}
+
+
+def _hg_app_episode_list(video_data: dict) -> list[dict]:
+    """从 App video_detail 里取出分集列表，按 vid_index 排序。"""
+    rows = video_data.get("video_list") or []
+    out = []
+    for item in rows:
+        if not isinstance(item, Mapping):
+            continue
+        vid = _text(item.get("vid"))
+        if not vid:
+            continue
+        try:
+            index = int(item.get("vid_index") or 0)
+        except (TypeError, ValueError):
+            index = 0
+        out.append({
+            "vid": vid,
+            "index": index,
+            "duration": int(item.get("duration") or 0),
+            "disable_play": bool(item.get("disable_play")),
+            "vertical": bool(item.get("vertical")),
+            "cover": _text(item.get("episode_cover") or item.get("cover")),
+        })
+    out.sort(key=lambda x: (x["index"], x["vid"]))
+    return out
+
+
+
+# ===== App 端播放链路（红果 App com.phoenix.read）=====
+# App 取流分两步：
+#   1) POST /novel/player/multi_video_model/v1/  -> bid + fplay 签名（当前服务端空体）
+#   2) GET  /video/fplay/1/<hash>/<bid>            -> 5 档清晰度(main_url/spade_a/kid/key_seed)
+# App 也会把 video_model 落盘到自己的 mmkv 缓存，这里直接复用该缓存，
+# 避免依赖已停服的 multi_video_model。
+_HG_APP_CACHE = "/data/user/0/com.phoenix.read/files/mmkv/prefix_private_base_video_model_disk_cache"
+# 红果把播放模型分散写进多个 MMKV 文件；video_model_disk_cache 只覆盖播放过的集数，
+# series_mall_landing_video_cache（约 16MB）里还带一批 vid -> fplay 凭据。
+# 两个文件都是 u0_a256 私有（-rwx------），宿主不是同一 uid 时直接 open 会 PermissionError，
+# 因此这里再退一步用 root 读一次（设备已 root 是部署前提）。
+_HG_APP_CACHE_CANDIDATES = (
+    _HG_APP_CACHE,
+    "/data/user/0/com.phoenix.read/files/mmkv/series_mall_landing_video_cache",
+)
+
+
+def _hg_app_cache_blob(path: str = "") -> bytes:
+    """读一份 App MMKV 缓存；先直接读，失败再走 root。"""
+    targets = (path,) if path else _HG_APP_CACHE_CANDIDATES
+    for target in targets:
+        if not target:
+            continue
+        try:
+            with open(target, "rb") as fh:
+                blob = fh.read()
+            if blob:
+                return blob
+        except Exception:
+            pass
+        # 直接读失败（跨 uid / SELinux）：试着用 root 读
+        for argv in (
+            ["su", "-c", "cat %s" % target],
+            ["su", "0", "cat", target],
+        ):
+            try:
+                import subprocess as _sp
+                done = _sp.run(argv, stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=25)
+                if done.returncode == 0 and done.stdout:
+                    return done.stdout
+            except Exception:
+                continue
+    return b""
+
+_HG_APP_DASH_HOST = "https://vas-lf-x.snssdk.com"
+
+
+def _hg_app_cache_models() -> dict:
+    """解析 App 自己的 video_model 磁盘缓存：vid -> {bid, hash, fplay_url, video_list}。"""
+    out = {}
+    blob = _hg_app_cache_blob()
+    if not blob:
+        return out
+    import re as _re
+    pattern = rb"(\d{15,20})\D*(\{\"a\":\{)"
+    for match in _re.finditer(pattern, blob):
+        vid = match.group(1).decode()
+        start = match.start(2)
+        depth = 0
+        index = start
+        in_str = False
+        esc = False
+        while index < len(blob):
+            char = blob[index]
+            if in_str:
+                if esc:
+                    esc = False
+                elif char == 0x5C:
+                    esc = True
+                elif char == 0x22:
+                    in_str = False
+            else:
+                if char == 0x22:
+                    in_str = True
+                elif char == 0x7B:
+                    depth += 1
+                elif char == 0x7D:
+                    depth -= 1
+                    if depth == 0:
+                        break
+            index += 1
+        raw = blob[start:index + 1].decode("utf-8", "replace")
+        raw = raw.replace("\\u0026", "&").replace("\\u003d", "=").replace("\\u002f", "/").replace("\\u003a", ":")
+        try:
+            model = json.loads(raw)
+        except Exception:
+            continue
+        ref = (model.get("a") or {}).get("vodVideoRef") or {}
+        bash = ref.get("mBashString") or ""
+        try:
+            parsed = json.loads(bash)
+        except Exception:
+            parsed = {}
+        fplay = ref.get("mFallbackApi") or ""
+        hash_part = ""
+        bid = ref.get("mBid") or ""
+        m = _re.search(r"/fplay/1/([0-9a-f]{32})/([^/?]+)", fplay)
+        if m:
+            hash_part = m.group(1)
+            bid = m.group(2)
+        out[vid] = {
+            "bid": bid,
+            "hash": hash_part,
+            "fplay": fplay,
+            "video_list": parsed.get("dynamic_video_list") or [],
+            "audio_list": parsed.get("dynamic_audio_list") or [],
+        }
+    return out
+
+
+def _hg_app_fplay(vid: str, quality: str = "") -> dict:
+    """用 App 缓存里的 fplay 凭据向 App 官方取流接口要播放模型。"""
+    models = _hg_app_cache_models()
+    entry = models.get(str(vid))
+    if not entry or not entry.get("fplay"):
+        return {}
+    try:
+        response = requests.get(entry["fplay"], headers={
+            "User-Agent": APP_UA,
+            "Accept": "application/json",
+        }, timeout=25)
+        if not response.content:
+            return {}
+        data = response.json() or {}
+    except Exception:
+        return {}
+    info = ((data.get("video_info") or {}).get("data") or {})
+    videos = info.get("video_list") or {}
+    if isinstance(videos, dict):
+        items = list(videos.values())
+    else:
+        items = list(videos)
+    picked = None
+    for item in items:
+        definition = str(item.get("definition") or "")
+        if quality and quality in definition:
+            picked = item
+            break
+    if picked is None and items:
+        picked = items[0]
+    if not picked:
+        return {}
+    picked = dict(picked)
+    audio = (picked.get("audio") or {})
+    if not audio:
+        for item in items:
+            if item.get("audio"):
+                audio = item.get("audio") or {}
+                break
+    picked["audio_info"] = audio
+    picked["key_seed"] = info.get("key_seed") or picked.get("key_seed") or ""
+    return picked
+
+
+def _hg_app_play_info(series_id: str, item_id: str, definition: str = "") -> dict:
+    """App 端 /novel/player/play-info：返回 DASH 播放模型（需 CENC 解密）。"""
+    body = {"item_id": str(item_id)}
+    if series_id:
+        body["series_id"] = str(series_id)
+    if definition:
+        body["definition"] = str(definition)
+    try:
+        response = requests.post(
+            SITE + "/api/video/protected/play-info",
+            json=body,
+            headers=_hg_web_headers(),
+            timeout=25,
+        )
+        if not response.content:
+            return {}
+        data = response.json() or {}
+    except Exception:
+        return {}
+    return data.get("play_info") or {}
+
+
+def _hg_dash_decrypt_key(model: dict) -> bytes:
+    """从 App 播放模型里取 CENC 内容密钥。
+
+    App 用 ECDH 协商（libencrypt.so: setAesContextInner/getAESTokenInner），
+    key_seed + kid 无法直接派生；这里优先用模型里已有的 spade_a 走
+    derive_content_key，失败返回空。
+    """
+    spade = model.get("spade_a") or ""
+    if not spade:
+        return b""
+    try:
+        return derive_content_key(spade)
+    except Exception:
+        return b""
+
+
 class Spider(_BaseSpider):
     def __init__(self):
         self.device_id = str(random.randint(10**17, 10**18 - 1))
         self.install_id = str(random.randint(10**17, 10**18 - 1))
 
     def getName(self):
-        return "红果短剧"
+        return "红果免费短剧"
 
     def isVideoFormat(self, url):
         u = str(url or "").lower()
@@ -4467,6 +4989,12 @@ class Spider(_BaseSpider):
             _hg_cache_cleanup(False)
         except Exception:
             pass
+        # App 真实接口（video_detail 等）需要设备号 + 签名，这里登记当前实例的设备对。
+        try:
+            _HG_APP_DEVICE["device_id"] = self.device_id
+            _HG_APP_DEVICE["install_id"] = self.install_id
+        except Exception:
+            pass
         return None
 
     def destroy(self):
@@ -4481,11 +5009,14 @@ class Spider(_BaseSpider):
         # 站点只在 /category?tab=1&topic= 下生效主题筛选（真人剧库）；漫剧/AI剧
         # 没有 tab 入口、漫画(tab=2)不收 topic，所以筛选只挂在真人剧分类上，
         # 其余分类不放行筛选项，避免出现"选了不生效"的死筛。
+        # 只放实测生效的主题（服务端返回列表与不带 topic 时完全不同）：
+        # 玄幻 cate_1019 / 奇幻 cate_1020 / 科幻 cate_1092 / 志怪 cate_1027 /
+        # 喜剧 cate_303 / 青春 cate_297 / 悬疑 cate_165。
         groups = [
             {"key": "topic", "name": "主题", "value": [
                 {"n": "全部", "v": ""}, {"n": "玄幻", "v": "cate_1019"}, {"n": "奇幻", "v": "cate_1020"},
                 {"n": "科幻", "v": "cate_1092"}, {"n": "志怪", "v": "cate_1027"}, {"n": "喜剧", "v": "cate_303"},
-                {"n": "青春", "v": "cate_297"},
+                {"n": "青春", "v": "cate_297"}, {"n": "悬疑", "v": "cate_165"},
             ]},
         ]
         filter_dict = {"drama": groups, "all": groups}
@@ -4595,6 +5126,9 @@ class Spider(_BaseSpider):
             "list": [_item(x) for x in rows],
         }
 
+    def searchContentPage(self, key, quick=False, pg="1"):
+        """部分壳用 searchContentPage 单独翻页；复用 searchContent 的真分页。"""
+        return self.searchContent(key, quick, pg)
 
     def detailContent(self, ids):
         try:
@@ -4605,6 +5139,11 @@ class Spider(_BaseSpider):
         sid = sid.replace("hg-series-v1:", "")
         if not sid:
             return {"list": []}
+        # App 真实接口优先：album_detail（封面/简介/热度）+ video_detail（完整分集表）。
+        app_cfg = {"device_id": self.device_id or "", "install_id": self.install_id or ""}
+        app_album = _hg_app_album_detail(sid, app_cfg)
+        app_video = _hg_app_video_detail(sid, app_cfg)
+        app_eps = _hg_app_episode_list(app_video)
         try:
             data = _data(SITE + "/detail?series_id=" + quote(sid, safe=""))
         except Exception:
@@ -4616,7 +5155,11 @@ class Spider(_BaseSpider):
         if not s and not p:
             return {"list": []}
         vids = s.get("vid_list") or []
+        if not vids and app_eps:
+            vids = [x["vid"] for x in app_eps]
         actors = [str(x.get("nickname")) for x in (s.get("celebrities") or []) if isinstance(x, dict) and x.get("nickname")]
+        if not actors:
+            actors = [str(x.get("nickname")) for x in (app_video.get("celebrities") or []) if isinstance(x, dict) and x.get("nickname")]
         play_from = []
         play_url = []
         for q, line_name in _HG_QUALITY_LINES:
@@ -4630,7 +5173,20 @@ class Spider(_BaseSpider):
             # 无 vid_list 时给一条占位，避免播放分区为空导致详情页看不到选集
             play_from = ["红果" + name for _q, name in _HG_QUALITY_LINES]
             play_url = ["" for _q, _n in _HG_QUALITY_LINES]
-        return {"list": [{"vod_id": sid, "vod_name": str(s.get("series_name") or ""), "vod_pic": str(s.get("series_cover") or ""), "vod_year": "", "vod_area": "", "vod_director": "", "vod_actor": ",".join(actors), "vod_content": str(s.get("series_intro") or ""), "vod_remarks": str(s.get("episode_right_text") or ""), "vod_play_from": "$$$".join(play_from), "vod_play_url": "$$$".join(play_url)}]}
+        name = str(s.get("series_name") or app_video.get("series_title") or app_album.get("title") or "")
+        pic = str(s.get("series_cover") or app_video.get("series_cover") or app_album.get("cover") or "")
+        intro = str(s.get("series_intro") or app_video.get("series_intro") or app_album.get("intro") or "")
+        remarks = str(s.get("episode_right_text") or app_video.get("episode_right_text") or "")
+        if not remarks and app_eps:
+            remarks = "全%d集" % len(app_eps)
+        # 视轨说明：App 播放模型里的视频轨可能是 ByteVC2(bvc2)，系统播放器解不了
+        # （只出声音没有画面）。这里只暴露系统可解的 avc1/hvc1 档位。
+        if app_eps:
+            free_eps = sum(1 for x in app_eps if not x.get("disable_play"))
+            remarks = remarks or ("全%d集" % len(app_eps))
+            if free_eps and free_eps < len(app_eps):
+                remarks = "%s·可播%d集" % (remarks, free_eps)
+        return {"list": [{"vod_id": sid, "vod_name": name, "vod_pic": pic, "vod_year": "", "vod_area": "", "vod_director": "", "vod_actor": ",".join(actors), "vod_content": intro, "vod_remarks": remarks, "vod_play_from": "$$$".join(play_from), "vod_play_url": "$$$".join(play_url)}]}
 
     def playerContent(self, flag, id, vipFlags=None):
         # 壳传进来的 id 是整条播放值 '第1集$hg-episode-v1:1080:<vid>'，
@@ -4801,7 +5357,8 @@ class Spider(_BaseSpider):
         if not vid:
             return [400, "text/plain; charset=utf-8", b"missing vid"]
 
-        # 官网公开取流：整块返回（壳代理不认 Range，至少能完整放一集）
+        # ===== App 端取流 =====
+        # 1) 免费集：官网公开回退接口给的是明文渐进 MP4（avc1 视轨 + mp4a 音轨），整块返回。
         try:
             public = _hg_public_play(vid)
         except Exception:
@@ -4819,11 +5376,29 @@ class Spider(_BaseSpider):
             except Exception:
                 pass
 
+        # 2) App 端模型（App 自己的 video_model 缓存 -> fplay 官方取流）
+        quality = str(param.get("q") or param.get("quality") or "")
+        model = _hg_app_fplay(vid, quality)
+        if not model:
+            model = _hg_app_play_info(str(param.get("sid") or ""), vid, quality)
+        if model.get("main_url"):
+            # 该模型是 CENC 加密的 DASH 分离视轨/音轨；密钥取不到时无法直接播，
+            # 交给上层给出明确错误。
+            key = _hg_dash_decrypt_key(model)
+            if key:
+                return _hg_dash_serve(model, key, param)
+            return [403, "text/plain; charset=utf-8",
+                    "该集需要红果 App 会员（免费仅前 3 集）".encode("utf-8")]
+        # 3) 明确的失败原因：免费额度用尽 / 需会员
+        return [403, "text/plain; charset=utf-8",
+                "该集需要红果 App 会员（免费仅前 3 集）".encode("utf-8")]
+
         try:
             cfg = {
                 "device_id": str(param.get("did") or self.device_id or ""),
                 "install_id": str(param.get("iid") or self.install_id or ""),
             }
+            series_id = str(param.get("sid") or param.get("series_id") or "")
             user_q = str(param.get("q") or param.get("quality") or "").strip()
             # 有原生 AES：优先 1080；纯 Python AES 很慢：先 720 保证能播，再尝试更高
             if user_q:
