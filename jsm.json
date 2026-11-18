@@ -131,6 +131,7 @@
 			}
 		},
 		{ "key": "盘链", "name": "盘链|网盘", "type": 3, "api": "csp_PingLian", "searchable": 1, "timeout":60, "ext": "./lib/tokenm.json$$$https://www.pinglian.lol$$$$$$0$$$$$$PANLIAN$$$USER$$$PASS" },
+		{"key":"zmi","name":"蜗牛|网盘","type":3,"api":"csp_Zmi","searchable":1,"quickSearch":1,"filterable":1,"timeout":60, "ext":"./lib/tokenm.json$$$https://www.wn4k.com/$$$proxy$$$1$$$$$$WONIU$$$USER$$$PASS$$$./lib/woniu.txt"},
 		{"key":"csp_Qwmp4","name":"七味|网盘|磁力","type":3,"api":"csp_Qwmp4","searchable":1,"quickSearch":1,"filterable":0, "timeout":60, "ext":"./lib/tokenm.json$$$https://www.qwmp4.com/$$$noproxy$$$0$$$$$QIWEI"},
 		{"key":"Mogg","name":"木偶哥哥|网盘","type":3,"api":"csp_Mogg","quickSearch":1, "changeable":1, "filterable":1, "timeout":60, "ext":"./lib/tokenm.json$$$http://123.666291.xyz/$$$noproxy$$$1$$$./lib/wogg.json$$$MOGG"},
 		{"key":"PanSouGo","name":"PanSouGo|网盘","type":3,"api":"csp_PanSouGo","quickSearch":1, "changeable":1, "filterable":1, "timeout":60, "ext":

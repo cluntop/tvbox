@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import bisect
+import gzip
 import hashlib
 import json
 import os
@@ -18,7 +19,7 @@ from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from html.parser import HTMLParser
 from typing import Any
-from urllib.parse import parse_qs, quote, urlencode, urlparse
+from urllib.parse import parse_qs, parse_qsl, quote, urlencode, urlparse
 import requests
 try:
     from cryptography.hazmat.primitives import hashes
@@ -788,72 +789,6 @@ def _json_response(response: requests.Response) -> Any:
         return response.json()
     except ValueError as exc:
         raise HongguoPluginError("上游响应不是 JSON") from exc
-
-
-# ---- 官网公开取流（播放器自己在用的 Web 接口，无需签名/设备号/登录）----
-# 2026-11 实测：
-#   POST /api/video/protected/play-info          {series_id, item_id, definition}
-#     → DASH：视频/音频两条独立 BaseURL + player_access_key，媒体由播放器插件
-#       本地解密（Mp4EncryptPlayer）。单 URL 拿不到完整可播文件，暂不使用。
-#   POST /api/video/protected/fallback-play-info  {item_id}
-#     → 单个渐进式 mp4：完整时长、avc1 + mp4a 双轨、明文、CDN 支持 Range。
-#       这是"公开回退"档（definition 参数不生效，固定 360P）。
-# 有它就能直接给播放器一条直链，不需要本机 Range 解密服务；App 取流接口
-# （multi_video_model）恢复后仍可走下面那套拿更高清晰度，两者互为兜底。
-_HG_FALLBACK_PLAY_INFO_URL = SITE + "/api/video/protected/fallback-play-info"
-
-
-def _hg_web_headers() -> dict[str, str]:
-    # 实测只需 User-Agent；不带头也通，带上更稳。
-    return {
-        "User-Agent": UA,
-        "Accept": "application/json",
-        "Content-Type": "application/json; charset=UTF-8",
-    }
-
-
-def _hg_public_play(video_id: str, timeout: int = 25) -> dict[str, Any]:
-    """官网公开取流：返回 {main_url, backup_url, url_expire}，拿不到返回带 error 的空 dict。
-
-    只有免费试看集能拿到（站点按 accessible_episode_cnt 放行，通常前 3 集）；
-    VIP 集返回 403 protected/public_fallback_unavailable，属正常拒绝，不重试。
-    """
-    last: dict[str, Any] = {}
-    for attempt in range(2):
-        try:
-            response = requests.post(
-                _HG_FALLBACK_PLAY_INFO_URL,
-                headers=_hg_web_headers(),
-                json={"item_id": str(video_id)},
-                timeout=timeout,
-            )
-            if response.status_code >= 500 or response.status_code in (408, 429):
-                last = {"error": "http %s" % response.status_code}
-            elif response.status_code != 200:
-                # 403/400 是站点的明确拒绝，重试没有意义
-                last = {"error": "http %s %s" % (response.status_code, response.text[:60])}
-                return last
-            else:
-                data = response.json() or {}
-                url = _text(data.get("main_url"))
-                if url and _looks_like_url(url):
-                    backup = _text(data.get("backup_url"))
-                    return {
-                        "main_url": url,
-                        "backup_url": backup if _looks_like_url(backup) else url,
-                        "url_expire": int(data.get("url_expire") or 0),
-                    }
-                reason = _text((data.get("base_resp") or {}).get("StatusMessage"))
-                last = {"error": "no main_url%s" % (": " + reason if reason else "")}
-                return last
-        except Exception as error:
-            last = {"error": "%s: %s" % (error.__class__.__name__, error)}
-        try:
-            time.sleep(0.4)
-        except Exception:
-            pass
-    return last
-
 
 def _get_html(url: str, *, attempts: int = _HTML_FETCH_ATTEMPTS) -> str:
     last_error: Exception | None = None
@@ -1692,6 +1627,84 @@ def _warm_burst(video_id: str, config: Mapping[str, Any], quality: str) -> None:
             _WARM_ACTIVE.discard(key)
 
 
+class _MemorySession:
+    """内存会话：整片已解密 MP4（App fplay 的 CENC 文件）按 Range 切片返回。
+
+    video_model 接口长期空体时，App 缓存里的 fplay 模型是唯一来源；CENC 解密
+    只能整块做，所以明文留在内存里，仍按 _StreamSession 的接口对外提供 Range，
+    播放器（含 seek、切集）不用改行为。
+    """
+
+    def __init__(self, data: bytes, url_expire: int = 0) -> None:
+        self.data = bytes(data)
+        self.total = len(self.data)
+        self.url = ""
+        self.url_expire = int(url_expire or 0)
+        self.created = time.time()
+
+    def expired(self) -> bool:
+        return time.time() - self.created > _STREAM_TTL_SECONDS
+
+    def read_range(self, start: int, end: int) -> bytes:
+        if self.total <= 0:
+            return b""
+        first = max(0, min(int(start), self.total - 1))
+        last = max(first, min(int(end), self.total - 1))
+        return self.data[first : last + 1]
+
+    def iter_range(self, start: int, end: int, chunk: int = _STREAM_CHUNK):
+        position = start
+        while position <= end:
+            stop = min(end, position + chunk - 1)
+            block = self.read_range(position, stop)
+            if not block:
+                break
+            yield block
+            position += len(block)
+
+def _session_from_app_cache(video_id: str, quality: str) -> Any:
+    """video_model 空体时的兜底：App 缓存 fplay 模型 -> 整片下载 -> CENC 解密 -> 内存会话。
+
+    拿不到模型或解不出可播视轨时返回 None，调用方按原逻辑报错，
+    不会把 bytevc2/加密壳当成功交给播放器。
+    """
+    try:
+        cached = _hg_cache_get(video_id, quality)
+        if cached and _hg_cached_ok(cached):
+            return _MemorySession(cached)
+    except Exception:
+        pass
+    try:
+        model = _hg_app_fplay(video_id, quality)
+    except Exception:
+        model = {}
+    if not model or not model.get("main_url"):
+        return None
+    key = _hg_dash_decrypt_key(model)
+    if not key:
+        return None
+    url = resolve_media_url(model, _key_seed_from_model(model))
+    if not url:
+        return None
+    try:
+        body = _multi_download(
+            url,
+            headers=MEDIA_HEADERS,
+            timeout=150 if _aes_is_fast() else 90,
+            workers=4 if _aes_is_fast() else 3,
+        )
+        plain = decrypt_mp4_cenc(body, key)
+    except Exception:
+        return None
+    if not plain or not _hg_cached_ok(plain):
+        return None
+    try:
+        _hg_cache_put(video_id, quality, plain)
+    except Exception:
+        pass
+    return _MemorySession(plain, _model_url_expire(model))
+
+
 def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "1080", force: bool = False) -> "_StreamSession":
     quality = quality if quality in _QUALITY_LINE_NAME_TO_Q else "1080"
     cache_key = "%s|%s" % (video_id, quality)
@@ -1726,35 +1739,39 @@ def _stream_session(video_id: str, config: Mapping[str, Any], quality: str = "10
         if session is not None:
             return session
     try:
-        # 双端点双 host 择优，快速失败；空体高峰期由上层后台重试兜底
-        model = _video_model_rotating(video_id, dict(config or {}))
-        _, item = _select_quality(_video_list_from_model(model), quality)
-        key_seed = _key_seed_from_model(model)
-        url = resolve_media_url(item, key_seed)
-        spade = _spade_value(item)
-        if not url:
-            raise HongguoPluginError("播放模型缺少地址")
-        if not spade:
-            # 这一档上游没有加密材料（gear_des_key 是 1:normal、无 encrypt_info）：
-            # 本来就是未加密直链，直通转发即可，不能再当成「缺密钥」判失败。
-            plain = _hg_plain_url_session(url, _hg_entry_size(item))
-            if plain is not None:
-                with _STREAM_LOCK:
-                    sessions = _STREAM_STATE["sessions"]
-                    while len(sessions) >= _STREAM_MAX_SESSIONS:
-                        sessions.pop(next(iter(sessions)), None)
-                    sessions[cache_key] = plain
-                return plain
-            raise HongguoPluginError("该档未加密但验不过标准编码")
-        total, moov_start, moov = _fetch_moov(url)
-        session = _StreamSession(
-            url,
-            derive_content_key(spade),
-            total,
-            moov_start,
-            moov,
-            _model_url_expire(model, item),
-        )
+        # 双端点双 host 择优，快速失败；空体高峰期由上层后台重试兜底。
+        # video_model 空体（2026-11 起的常态）时退回 App 缓存里的 fplay 模型，
+        # 整片下载 + CENC 解密后用内存会话对外提供 Range。
+        session = None
+        try:
+            model = _video_model_rotating(video_id, dict(config or {}))
+            _, item = _select_quality(_video_list_from_model(model), quality)
+            key_seed = _key_seed_from_model(model)
+            url = resolve_media_url(item, key_seed)
+            spade = _spade_value(item)
+            if not url:
+                raise HongguoPluginError("播放模型缺少地址")
+            if not spade:
+                # 这一档上游没有加密材料（gear_des_key 是 1:normal、无 encrypt_info）：
+                # 本来就是未加密直链，直通转发即可，不能再当成「缺密钥」判失败。
+                plain = _hg_plain_url_session(url, _hg_entry_size(item))
+                if plain is None:
+                    raise HongguoPluginError("该档未加密但验不过标准编码")
+                session = plain
+            else:
+                total, moov_start, moov = _fetch_moov(url)
+                session = _StreamSession(
+                    url,
+                    derive_content_key(spade),
+                    total,
+                    moov_start,
+                    moov,
+                    _model_url_expire(model, item),
+                )
+        except BaseException as model_error:
+            session = _session_from_app_cache(video_id, quality)
+            if session is None:
+                raise
         with _STREAM_LOCK:
             sessions = _STREAM_STATE["sessions"]
             while len(sessions) >= _STREAM_MAX_SESSIONS:
@@ -4628,6 +4645,7 @@ def _hg_app_signed_post(path: str, body: dict, config: dict, timeout: int = 25) 
     }
     payload = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     last = ""
+    reregistered = False
     for host in _HG_APP_API_HOSTS:
         for attempt in range(2):
             try:
@@ -4642,6 +4660,17 @@ def _hg_app_signed_post(path: str, body: dict, config: dict, timeout: int = 25) 
                 )
                 if not response.content:
                     last = "empty response"
+                    # 空体 = 注册态可能已失效：重新注册后重试一次
+                    if not reregistered:
+                        reregistered = True
+                        _hg_register_invalidate("empty response")
+                        # 失效后真正重新注册（换新设备号），再用新号重签
+                        state = _hg_register_ensure(force=True)
+                        if state.get("ok"):
+                            devices = _device_config(
+                                {"device_id": state.get("device_id"),
+                                 "install_id": state.get("install_id")})
+                        params = _hg_app_sign_params(devices)
                     continue
                 try:
                     data = response.json()
@@ -4651,6 +4680,16 @@ def _hg_app_signed_post(path: str, body: dict, config: dict, timeout: int = 25) 
                 if isinstance(data, dict) and data.get("code") == 0:
                     return data
                 last = "code=%s %s" % (data.get("code"), str(data.get("message") or "")[:40])
+                if _hg_response_looks_unauthorized(data) and not reregistered:
+                    reregistered = True
+                    _hg_register_invalidate(last)
+                    state = _hg_register_ensure(force=True)
+                    if state.get("ok"):
+                        devices = _device_config(
+                            {"device_id": state.get("device_id"),
+                             "install_id": state.get("install_id")})
+                    params = _hg_app_sign_params(devices)
+                    continue
             except Exception as error:
                 last = "%s: %s" % (error.__class__.__name__, error)
             try:
@@ -4666,6 +4705,203 @@ def _hg_app_signed_post(path: str, body: dict, config: dict, timeout: int = 25) 
 
 _HG_APP_DEVICE = {"device_id": "", "install_id": ""}
 
+
+
+# ===== 设备注册（/reading/crypt/registerkey）与失效重注册 =====
+# App 侧真实调用：POST https://reading.snssdk.com/reading/crypt/registerkey
+#   headers: Accept: application/json; charset=utf-8,application/x-protobuf
+#            Content-Encoding: gzip
+#            X-Xs-From-Web: 0
+#   body   : {"content":"<base64>","keyver":1001}   （gzip 压缩后 112 字节）
+#   content 解码后 48 字节：前 16 字节 UUID，后 32 字节设备密钥材料。
+# 注册态落盘到 spider 自己的缓存目录，进程重启可复用；接口空体/403/登录态失效时
+# 自动重新注册（换新的设备号与 content）并重试一次。
+_HG_REGISTER_PATH = "/reading/crypt/registerkey"
+_HG_REGISTER_KEYVER = 1001
+_HG_REG_STATE_FILE = "hg_register.json"
+_HG_REG_LOCK = threading.RLock()
+_HG_REG_STATE: dict = {}
+
+
+def _hg_register_state_path() -> str:
+    try:
+        return os.path.join(_hg_cache_dir(), _HG_REG_STATE_FILE)
+    except Exception:
+        return ""
+
+
+def _hg_register_state_load() -> dict:
+    path = _hg_register_state_path()
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _hg_register_state_save(state: dict) -> None:
+    path = _hg_register_state_path()
+    if not path:
+        return
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+def _hg_register_content(device_id: str, install_id: str) -> str:
+    """构造 registerkey 的 content：16 字节 UUID + 32 字节设备材料。
+
+    抓包里 content 解码后是 48 字节；前 16 字节是标准 UUID 形态（带 '-'），
+    后 32 字节是二进制设备材料。这里按同样结构生成：UUID 取设备号派生的稳定值，
+    设备材料用 device_id/install_id 的 sha256 前 32 字节，拼接后整体 base64。
+    """
+    try:
+        seed = hashlib.md5(("%s|%s" % (device_id, install_id)).encode("utf-8")).hexdigest()
+        uuid_text = "%s-%s-%s-%s-%s" % (seed[0:8], seed[8:12], seed[12:16], seed[16:20], seed[20:32])
+        head = uuid_text.replace("-", "").encode("utf-8")
+        # 补齐到 16 字节
+        head = (head + b"\0" * 16)[:16]
+        material = hashlib.sha256(("hg|%s|%s" % (device_id, install_id)).encode("utf-8")).digest()[:32]
+        return base64.b64encode(head + material).decode("ascii")
+    except Exception:
+        return base64.b64encode(os.urandom(48)).decode("ascii")
+
+
+def _hg_register_once(device_id: str, install_id: str, timeout: int = 20) -> dict:
+    """调用 registerkey 完成注册；成功返回 {"ok":True,...}，失败返回 {"ok":False,...}。"""
+    payload = {
+        "content": _hg_register_content(device_id, install_id),
+        "keyver": _HG_REGISTER_KEYVER,
+    }
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    gz = gzip.compress(body)
+    headers = {
+        "User-Agent": APP_UA,
+        "Accept": "application/json; charset=utf-8,application/x-protobuf",
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Encoding": "gzip",
+        "X-Xs-From-Web": "0",
+        "X-SS-REQ-TICKET": str(int(time.time() * 1000)),
+        "x-reading-request": "%d-%d" % (int(time.time() * 1000), random.randint(0, 999999999)),
+        "x-tt-request-tag": "t=0;n=0",
+    }
+    devices = {
+        "device_id": device_id,
+        "install_id": install_id,
+        "ua": APP_UA,
+    }
+    params = _hg_app_sign_params(devices)
+    last = ""
+    for host in _HG_APP_API_HOSTS:
+        url = host + _HG_REGISTER_PATH
+        try:
+            signed_headers, signed_url = _core_sixgod(url, params, devices, payload, headers)
+        except Exception as error:
+            last = "sign: %s" % error
+            continue
+        signed_headers["Content-Encoding"] = "gzip"
+        try:
+            response = requests.post(signed_url, headers=signed_headers, data=gz, timeout=timeout)
+        except Exception as error:
+            last = "post: %s" % error
+            continue
+        if not response.content:
+            last = "empty response"
+            continue
+        try:
+            data = response.json() or {}
+        except Exception:
+            last = "invalid json"
+            continue
+        if isinstance(data, dict) and data.get("code") in (0, None) and not data.get("error"):
+            return {"ok": True, "response": data}
+        last = "code=%s msg=%s" % (data.get("code"), str(data.get("message") or "")[:60])
+    return {"ok": False, "error": last or "register failed"}
+
+
+def _hg_register_ensure(force: bool = False) -> dict:
+    """确保有可用注册态；失效或 force 时重新注册并持久化。"""
+    with _HG_REG_LOCK:
+        if not force and _HG_REG_STATE.get("ok"):
+            return dict(_HG_REG_STATE)
+        saved = _hg_register_state_load()
+        device_id = str(saved.get("device_id") or "")
+        install_id = str(saved.get("install_id") or "")
+        if force or not device_id or not install_id:
+            device_id = str(random.randint(10 ** 17, 10 ** 18 - 1))
+            install_id = str(random.randint(10 ** 17, 10 ** 18 - 1))
+        result = _hg_register_once(device_id, install_id)
+        state = {
+            "ok": bool(result.get("ok")),
+            "device_id": device_id,
+            "install_id": install_id,
+            "registered_at": int(time.time()),
+            "error": str(result.get("error") or ""),
+        }
+        _HG_REG_STATE.clear()
+        _HG_REG_STATE.update(state)
+        if state["ok"]:
+            _hg_register_state_save(state)
+            try:
+                _HG_APP_DEVICE["device_id"] = device_id
+                _HG_APP_DEVICE["install_id"] = install_id
+            except Exception:
+                pass
+        return dict(state)
+
+
+def _hg_register_invalidate(reason: str = "") -> None:
+    """标记当前注册态失效（下一次取流会触发重新注册）。"""
+    with _HG_REG_LOCK:
+        _HG_REG_STATE["ok"] = False
+        _HG_REG_STATE["invalidated_at"] = int(time.time())
+        if reason:
+            _HG_REG_STATE["error"] = str(reason)[:120]
+    try:
+        print("hg 注册失效: %s" % (reason or "unknown"))
+    except Exception:
+        pass
+
+
+def _hg_response_looks_unauthorized(payload: Any) -> bool:
+    """判断响应是否属于「登录态/注册态失效」。"""
+    text = ""
+    if isinstance(payload, str):
+        text = payload
+    elif isinstance(payload, Mapping):
+        for key in ("error", "message", "msg", "status_msg", "status_message"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                text += " " + value.lower()
+    elif payload is None:
+        return True
+    text = text.lower()
+    markers = (
+        "invalid login status",
+        "invalid session",
+        "session expired",
+        "login required",
+        "not logged in",
+        "passport",
+        "unauthorized",
+        "forbidden",
+        "invalid device",
+        "device register",
+        "registerkey",
+        "key expired",
+        "invalid signature",
+        "signature error",
+        "empty response",
+    )
+    return any(marker in text for marker in markers)
 
 def _hg_app_post(path: str, body: dict, config: dict | None = None, timeout: int = 25) -> dict:
     """调用红果 App 真实接口（album_detail 免登录；video_detail 走签名分支）。"""
@@ -4871,28 +5107,80 @@ def _hg_app_cache_models() -> dict:
     return out
 
 
+_HG_FPLAY_CODEC_TYPE = "1"
+
+
+def _hg_fplay_playable_url(url: str) -> str:
+    """把 App 给的 fplay 直链里的 codec_type 改成壳能解码的编码。
+
+    2026-11 实测同一 <hash>/<bid> 下：
+      codec_type=4/5/6 -> 5 档清晰度但 frma=bvc2（ByteVC2，标准播放器解不了，黑屏有声）
+      codec_type=1/2/3 -> 单条 1080p，frma=hvc1 + mp4a，CENC 解出来首个样本以 VPS 开头
+    codec_type 不参与 URL 鉴权，改掉后仍返回 200，所以优先要 hvc1；
+    查询串里没有 codec_type 时原样返回，避免自作主张加参数。
+    """
+    try:
+        parsed = urlparse(url)
+        pairs = parse_qsl(parsed.query, keep_blank_values=True)
+        if not pairs:
+            return url
+        changed = False
+        out = []
+        for key, value in pairs:
+            if key == "codec_type" and value != _HG_FPLAY_CODEC_TYPE:
+                out.append((key, _HG_FPLAY_CODEC_TYPE))
+                changed = True
+            else:
+                out.append((key, value))
+        if not changed:
+            return url
+        return parsed._replace(query=urlencode(out)).geturl()
+    except Exception:
+        return url
+
+
 def _hg_app_fplay(vid: str, quality: str = "") -> dict:
     """用 App 缓存里的 fplay 凭据向 App 官方取流接口要播放模型。"""
     models = _hg_app_cache_models()
     entry = models.get(str(vid))
     if not entry or not entry.get("fplay"):
         return {}
-    try:
-        response = requests.get(entry["fplay"], headers={
-            "User-Agent": APP_UA,
-            "Accept": "application/json",
-        }, timeout=25)
-        if not response.content:
+    def _fetch(url: str) -> dict:
+        try:
+            response = requests.get(url, headers={
+                "User-Agent": APP_UA,
+                "Accept": "application/json",
+            }, timeout=25)
+            if not response.content:
+                return {}
+            return ((response.json() or {}).get("video_info") or {}).get("data") or {}
+        except Exception:
             return {}
-        data = response.json() or {}
-    except Exception:
+
+    def _items(payload) -> list:
+        videos = (payload or {}).get("video_list") or {}
+        if isinstance(videos, dict):
+            return list(videos.values())
+        return list(videos)
+
+    info = _fetch(entry["fplay"])
+    items = _items(info)
+    if not items:
         return {}
-    info = ((data.get("video_info") or {}).get("data") or {})
-    videos = info.get("video_list") or {}
-    if isinstance(videos, dict):
-        items = list(videos.values())
-    else:
-        items = list(videos)
+    # App 默认（codec_type=4/5/6）里只有 1080p 是 h265_hvc1，其余档位是 bytevc2，
+    # 壳解不了 bytevc2（黑屏有声）。codec_type 不参与 fplay 鉴权（auth_query 只覆盖
+    # stream_type/force_fids），所以全是 bytevc2 时改用 codec_type=1 再要一次，
+    # 服务端就只回那条 h265 可解档。
+    if all(_hg_entry_is_bytevc2(item) for item in items):
+        alt = _hg_fplay_playable_url(entry["fplay"])
+        if alt and alt != entry["fplay"]:
+            alt_info = _fetch(alt)
+            alt_items = _items(alt_info)
+            if alt_items:
+                info, items = alt_info, alt_items
+    decodable = [item for item in items if not _hg_entry_is_bytevc2(item)]
+    if decodable:
+        items = decodable
     picked = None
     for item in items:
         definition = str(item.get("definition") or "")
@@ -4915,27 +5203,188 @@ def _hg_app_fplay(vid: str, quality: str = "") -> dict:
     return picked
 
 
-def _hg_app_play_info(series_id: str, item_id: str, definition: str = "") -> dict:
-    """App 端 /novel/player/play-info：返回 DASH 播放模型（需 CENC 解密）。"""
-    body = {"item_id": str(item_id)}
-    if series_id:
-        body["series_id"] = str(series_id)
-    if definition:
-        body["definition"] = str(definition)
-    try:
-        response = requests.post(
-            SITE + "/api/video/protected/play-info",
-            json=body,
-            headers=_hg_web_headers(),
-            timeout=25,
-        )
-        if not response.content:
-            return {}
-        data = response.json() or {}
-    except Exception:
-        return {}
-    return data.get("play_info") or {}
+def _hg_oracle_model_path() -> str:
+    """LSPosed oracle 落盘的 App 播放模型（App 端 video_model 响应，每行一个 JSON）。"""
+    for path in (
+        "/storage/emulated/0/hg_work/hg_model_out.json",
+        "/data/user/0/com.phoenix.read/files/hg_model_out.json",
+    ):
+        try:
+            if os.path.isfile(path):
+                return path
+        except Exception:
+            continue
+    return ""
 
+
+def _hg_oracle_models() -> dict:
+    """读 oracle 落盘文件 -> {video_id: model}。
+
+    oracle 由 com.hgprobe 模块（LSposed）把 App 自己解析到的播放模型原样落盘：
+    {"status":10,"video_id":"v0...","url_expire":...,
+      "fallback_api":{"fallback_api":"https://vas-lf-x.snssdk.com/video/fplay/1/<hash>/<bid>?..."},
+      "video_list":[{"quality_type":40,"gear_des_key":"...|4:360p|...",
+                     "main_url":"https://...","video_meta":{...},
+                     "encrypt_info":{"kid":...,"spade_a":...,"encryption_method":"cenc-aes-ctr"}}]}
+    这里统一转成 spider 内部模型形状：每档清晰度一条，含 main_url/kid/spade_a/definition。
+    """
+    out: dict = {}
+    path = _hg_oracle_model_path()
+    if not path:
+        return out
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+    except Exception:
+        return out
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except Exception:
+            continue
+        if not isinstance(data, Mapping):
+            continue
+        video_list = data.get("video_list")
+        if not isinstance(video_list, list) or not video_list:
+            continue
+        video_id = _text(data.get("video_id"))
+        rows = []
+        for entry in video_list:
+            if not isinstance(entry, Mapping):
+                continue
+            meta = entry.get("video_meta")
+            if not isinstance(meta, Mapping):
+                meta = {}
+            encrypt = entry.get("encrypt_info")
+            if not isinstance(encrypt, Mapping):
+                encrypt = {}
+            main_url = _text(entry.get("main_url"))
+            if not main_url:
+                continue
+            rows.append({
+                "definition": _text(meta.get("definition")),
+                "codec_type": _text(meta.get("codec_type")),
+                "size": int(meta.get("size") or 0),
+                "vwidth": int(meta.get("vwidth") or 0),
+                "vheight": int(meta.get("vheight") or 0),
+                "main_url": main_url,
+                "backup_url": _text(entry.get("backup_url")),
+                "kid": _text(encrypt.get("kid")),
+                "spade_a": _text(encrypt.get("spade_a")),
+                "encryption_method": _text(encrypt.get("encryption_method")),
+                "gear_des_key": _text(entry.get("gear_des_key")),
+                "quality_type": entry.get("quality_type"),
+            })
+        if not rows:
+            continue
+        fallback = data.get("fallback_api")
+        if isinstance(fallback, Mapping):
+            fallback = fallback.get("fallback_api")
+        out[video_id] = {
+            "video_id": video_id,
+            "url_expire": int(data.get("url_expire") or 0),
+            "fallback_api": _text(fallback),
+            "rows": rows,
+        }
+    return out
+
+
+def _hg_oracle_bid_for_vid(vid: str) -> str:
+    """把 spider 的数字 vid 映射到 App 侧 fplay bid（v0...）。
+
+    App 的 video_model 缓存里每个数字 vid 都带一条 mFallbackApi（fplay 直链），
+    里面 /fplay/1/<hash>/<bid> 的 bid 就是 oracle 模型里的 video_id，两边由此对上。
+    """
+    if not vid:
+        return ""
+    try:
+        entry = _hg_app_cache_models().get(str(vid))
+    except Exception:
+        entry = None
+    fplay = (entry or {}).get("fplay") or ""
+    match = re.search(r"/fplay/1/[0-9a-f]{32}/([^/?]+)", fplay)
+    return match.group(1) if match else ""
+
+
+def _hg_oracle_row(vid: str, quality: str = "") -> dict:
+    """按清晰度从 oracle 模型里挑一条。
+
+    vid 可以是：App 的 video_id（v0...）、fplay bid，或 spider 的数字 vid
+    （数字 vid 先经 App 的 video_model 缓存映射成 bid）。
+    """
+    models = _hg_oracle_models()
+    if not models:
+        return {}
+    wanted = quality or "1080"
+    order = [wanted, "1080", "720", "540", "480", "360"]
+    aliases = {str(vid or "")}
+    if vid and not str(vid).startswith("v0"):
+        bid = _hg_oracle_bid_for_vid(str(vid))
+        if bid:
+            aliases.add(bid)
+    fallback: dict = {}
+    for key, model in models.items():
+        model_vid = model.get("video_id") or ""
+        if aliases and key not in aliases and model_vid not in aliases:
+            bid = ""
+            match = re.search(r"/fplay/1/[0-9a-f]{32}/([^/?]+)", model.get("fallback_api") or "")
+            if match:
+                bid = match.group(1)
+            if bid not in aliases:
+                continue
+        rows = model.get("rows") or []
+        for quality_name in order:
+            for row in rows:
+                if str(row.get("definition") or "").startswith(quality_name):
+                    picked = dict(row)
+                    picked["key_seed"] = ""
+                    picked["url_expire"] = model.get("url_expire")
+                    return picked
+        if not fallback and rows:
+            fallback = dict(rows[0])
+            fallback["key_seed"] = ""
+            fallback["url_expire"] = model.get("url_expire")
+    return fallback
+
+
+def _hg_app_model_entry(vid: str, quality: str, config: Mapping[str, Any] | None = None) -> dict:
+    """播放取流统一入口（只走 App 端）。
+
+    顺序：
+      1) App 签名取流接口 video_model（/novel/player/multi_video_model/...，2026-11 起常空体）；
+      2) App 自己的 video_model 磁盘缓存 -> /video/fplay/1/<hash>/<bid> 官方取流接口。
+    返回可直接交给 _hg_dash_serve 的条目（main_url 已解成 http 直链）。
+    Web 端（hongguoduanju.com 的 fallback-play-info / protected play-info）不参与播放。
+    """
+    # App oracle 优先：LSPosed 模块落盘的 App 端真实播放模型（含 spade_a/kid）
+    try:
+        row = _hg_oracle_row(vid, quality)
+    except Exception:
+        row = {}
+    if row.get("main_url"):
+        return row
+    entry = {}
+    try:
+        model = _video_model_rotating(vid, dict(config or {}))
+        _, item = _select_quality(_video_list_from_model(model), quality)
+        if isinstance(item, Mapping):
+            url = resolve_media_url(item, _key_seed_from_model(model))
+            if url:
+                entry = dict(item)
+                entry["main_url"] = url
+                entry["key_seed"] = _text(model.get("key_seed")) or _text(item.get("key_seed"))
+                entry["definition"] = _text(item.get("definition")) or quality
+                return entry
+    except Exception:
+        pass
+    try:
+        fplay = _hg_app_fplay(vid, quality)
+    except Exception:
+        fplay = {}
+    return fplay or {}
 
 def _hg_dash_decrypt_key(model: dict) -> bytes:
     """从 App 播放模型里取 CENC 内容密钥。
@@ -4946,11 +5395,68 @@ def _hg_dash_decrypt_key(model: dict) -> bytes:
     """
     spade = model.get("spade_a") or ""
     if not spade:
+        encrypt = model.get("encrypt_info")
+        if isinstance(encrypt, Mapping):
+            spade = _text(encrypt.get("spade_a"))
+    if not spade:
         return b""
     try:
         return derive_content_key(spade)
     except Exception:
         return b""
+
+
+def _hg_dash_serve(model: Mapping[str, Any], key: bytes, param: Mapping[str, Any]) -> list:
+    """把 App fplay 模型的 CENC 整片解密后整块返回（video/mp4）。
+
+    fplay 直链（codec_type=1）是单文件 hvc1 + mp4a，两轨都带 senc：
+      1) main_url 是 spade 密文，用模型里的 key_seed 解成 CDN 直链；
+      2) 整片下载后按 CENC-AESCTR 用 derive_content_key(spade_a) 解样本；
+      3) 校验 moov 里存在可解视轨（avc1/hvc1/hev1/avc3）才吐给壳，并落盘缓存。
+    上游 url_expire 约 30 分钟，命中缓存直接返回，避免重复下载解密。
+    """
+    vid = _text(param.get("vid") or param.get("id") or "")
+    quality = _quality(model.get("definition") or param.get("q") or "")
+    if vid and quality:
+        try:
+            cached = _hg_cache_get(vid, quality)
+            if cached and _hg_cached_ok(cached):
+                return [200, "video/mp4", cached]
+        except Exception:
+            pass
+    key_seed = _key_seed_from_model(model)
+    url = resolve_media_url(model, key_seed)
+    if not url:
+        return [500, "text/plain; charset=utf-8",
+                b"fplay model has no usable url"]
+    try:
+        body = _multi_download(
+            url,
+            headers=MEDIA_HEADERS,
+            timeout=150 if _aes_is_fast() else 90,
+            workers=4 if _aes_is_fast() else 3,
+        )
+    except Exception as error:
+        return [502, "text/plain; charset=utf-8",
+                ("fplay download failed: %s" % error).encode("utf-8")]
+    if not body:
+        return [502, "text/plain; charset=utf-8", b"empty fplay body"]
+    try:
+        plain = decrypt_mp4_cenc(body, key)
+    except Exception as error:
+        return [500, "text/plain; charset=utf-8",
+                ("cenc decrypt failed: %s" % error).encode("utf-8")]
+    if len(plain) < 64 or (b"ftyp" not in plain[:64] and b"moov" not in plain[:4096]):
+        return [500, "text/plain; charset=utf-8", b"bad mp4 after decrypt"]
+    if not _hg_cached_ok(plain):
+        return [500, "text/plain; charset=utf-8",
+                b"decrypted mp4 has no playable video track"]
+    if vid and quality:
+        try:
+            _hg_cache_put(vid, quality, plain)
+        except Exception:
+            pass
+    return [200, "video/mp4", plain]
 
 
 class Spider(_BaseSpider):
@@ -4987,6 +5493,15 @@ class Spider(_BaseSpider):
         # 每次源实例使用随机合法设备标识；不依赖用户私有配置。
         try:
             _hg_cache_cleanup(False)
+        except Exception:
+            pass
+        # 设备注册：优先复用已持久化的注册态，缺失/失效则重新注册。
+        # 注册成功后的 device_id/install_id 才是 App 接口真正认的设备号。
+        try:
+            state = _hg_register_ensure()
+            if state.get("ok"):
+                self.device_id = str(state.get("device_id") or self.device_id)
+                self.install_id = str(state.get("install_id") or self.install_id)
         except Exception:
             pass
         # App 真实接口（video_detail 等）需要设备号 + 签名，这里登记当前实例的设备对。
@@ -5203,20 +5718,9 @@ class Spider(_BaseSpider):
                 "url": SITE + "/",
                 "header": {"User-Agent": UA},
             }
-        # 取流优先级：官网公开取流直链 > 本机 Range 流服务 > 上游直通直链 > 壳代理。
-        # 公开取流（Web 接口 fallback-play-info）返回的是一条明文 mp4 直链：
-        # 完整时长、avc1+mp4a、CDN 认 Range，播放器自己 seek，不经过本机解密，
-        # 也不需要 device_id/签名。缺点是固定 360P（见 _hg_public_play 注释）。
-        # 只有它失败时才走下面的 App 取流 + CENC 解密（接口恢复后可选更高清晰度）。
-        public = _hg_public_play(vid)
-        if public.get("main_url"):
-            return {
-                "parse": 0,
-                "jx": 0,
-                "playUrl": "",
-                "url": public["main_url"],
-                "header": {"User-Agent": UA},
-            }
+        # 取流优先级（全局 App 端）：App 签名 video_model（空体时退回 App 缓存 fplay
+        # 整片 CENC 解密，走本机 Range 流服务）> 壳代理。
+        # 这里不再请求 Web 端 fallback-play-info（只有 360P，且属 Web 播放链路）。
         # 壳代理（fongmi / OK影视 的 /proxy?do=py）实测会忽略 Range：对 bytes=0-1023
         # 也回 200 + 整片 + chunked，既无 Content-Range 也无 Accept-Ranges，且必须
         # 等整片下载 + CENC 解密完成后才吐首字节（单集 12~17MB，实测 8.7s / 16.3s，
@@ -5357,41 +5861,32 @@ class Spider(_BaseSpider):
         if not vid:
             return [400, "text/plain; charset=utf-8", b"missing vid"]
 
-        # ===== App 端取流 =====
-        # 1) 免费集：官网公开回退接口给的是明文渐进 MP4（avc1 视轨 + mp4a 音轨），整块返回。
+        # ===== 播放取流：全局走 App 端 =====
+        # App 端两级来源：签名取流接口 video_model -> App 缓存里的 fplay 凭据。
+        # Web 端（官网 fallback-play-info 固定 360P / protected play-info）不参与播放，
+        # 也不再把 Web 直链交给播放器。
+        quality = str(param.get("q") or param.get("quality") or "") or "1080"
         try:
-            public = _hg_public_play(vid)
+            cached = _hg_cache_get(vid, quality)
+            if cached and _hg_cached_ok(cached):
+                return [200, "video/mp4", cached]
         except Exception:
-            public = {}
-        if public.get("main_url"):
-            try:
-                body = _multi_download(
-                    public["main_url"],
-                    headers={"User-Agent": UA},
-                    timeout=120,
-                    workers=4,
-                )
-                if body and (b"ftyp" in body[:64] or b"moov" in body[:4096]):
-                    return [200, "video/mp4", body]
-            except Exception:
-                pass
-
-        # 2) App 端模型（App 自己的 video_model 缓存 -> fplay 官方取流）
-        quality = str(param.get("q") or param.get("quality") or "")
-        model = _hg_app_fplay(vid, quality)
-        if not model:
-            model = _hg_app_play_info(str(param.get("sid") or ""), vid, quality)
+            pass
+        cfg = {
+            "device_id": str(param.get("did") or self.device_id or ""),
+            "install_id": str(param.get("iid") or self.install_id or ""),
+        }
+        model = _hg_app_model_entry(vid, quality, cfg)
         if model.get("main_url"):
-            # 该模型是 CENC 加密的 DASH 分离视轨/音轨；密钥取不到时无法直接播，
-            # 交给上层给出明确错误。
+            # App 取流是 CENC 加密（cenc-aes-ctr，hvc1/avc1 + mp4a）：密钥由 spade_a 派生，
+            # 拿不到密钥时宁可明确报错，也不把加密壳或 bytevc2 丢给播放器。
             key = _hg_dash_decrypt_key(model)
             if key:
                 return _hg_dash_serve(model, key, param)
-            return [403, "text/plain; charset=utf-8",
-                    "该集需要红果 App 会员（免费仅前 3 集）".encode("utf-8")]
-        # 3) 明确的失败原因：免费额度用尽 / 需会员
+            return [500, "text/plain; charset=utf-8",
+                    "App 取流模型缺少 CENC 密钥材料（spade_a）".encode("utf-8")]
         return [403, "text/plain; charset=utf-8",
-                "该集需要红果 App 会员（免费仅前 3 集）".encode("utf-8")]
+                "App 端取流不可用：video_model 空体且本地无该集 fplay 缓存".encode("utf-8")]
 
         try:
             cfg = {
