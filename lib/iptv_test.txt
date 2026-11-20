@@ -42,14 +42,14 @@ CCTV,http://74.91.26.218:82/live/cctv10hd.m3u8$LR•IPV4•89『线路33』
 CCTV,http://38.75.136.137:98/gslb/dsdqpub/sjdl.m3u8?auth=testpub$LR•IPV4•89『线路34』
 CCTV,http://74.91.26.218:82/live/cctv17hd.m3u8$LR•IPV4•89『线路35』
 CCTV,http://38.75.136.137:98/gslb/dsdqpub/hjjc.m3u8?auth=testpub$LR•IPV4•89『线路36』
-CCTV,https://v4-e6b1c5baf4e240fe63adbf68dda23435.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=cf24af439d8df396a6e1dcbb70e92937$LR•IPV4•89『线路37』
+CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=4e969d44d997a15c1eb429972117014a$LR•IPV4•89『线路37』
 CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=8d9e4d56b1405ac9b7539cf7ec81420e$LR•IPV4•89『线路38』
-CCTV,https://p2.bdstatic.com/rtmp.liveshow.lss-user.baidubce.com/live/stream_bduid_6488563992_8982723413/merged_1707497046297_88536_25144_41936.m3u8$LR•IPV4•89『线路39』
-CCTV,https://event.pull.hebtv.com/jishi/cp1.m3u8$LR•IPV4•89『线路40』
-CCTV,https://event.pull.hebtv.com/jishi/cp2.m3u8$LR•IPV4•89『线路41』
-CCTV,https://live.264788.xyz/channel/huaijiujuchang?streamid=7e5d1abdddde08f588234f3f640f75ff&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路42』
-CCTV,https://live.264788.xyz/channel/diyijuchang?streamid=e9b0fb1ca135a4aeae12944494883794&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路43』
-CCTV,https://live.264788.xyz/channel/yangshiwenhuajingpin?streamid=bc185d1ef1e528922e83efd845006277&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路44』
+CCTV,https://live.264788.xyz/channel/huaijiujuchang?streamid=7e5d1abdddde08f588234f3f640f75ff&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路39』
+CCTV,https://live.264788.xyz/channel/diyijuchang?streamid=e9b0fb1ca135a4aeae12944494883794&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路40』
+CCTV,https://live.264788.xyz/channel/yangshiwenhuajingpin?streamid=bc185d1ef1e528922e83efd845006277&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•89『线路41』
+CCTV,https://p2.bdstatic.com/rtmp.liveshow.lss-user.baidubce.com/live/stream_bduid_6488563992_8982723413/merged_1707497046297_88536_25144_41936.m3u8$LR•IPV4•89『线路42』
+CCTV,https://event.pull.hebtv.com/jishi/cp1.m3u8$LR•IPV4•89『线路43』
+CCTV,https://event.pull.hebtv.com/jishi/cp2.m3u8$LR•IPV4•89『线路44』
 CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=b8c87eee19b7a1c20b2c320c7a83a6de$LR•IPV4•89『线路45』
 CCTV,https://live.eac-news.com/CCTV/streams/cctv6.m3u8$LR•IPV4•89『线路46』
 CCTV,https://h5cul1yar48um3t.wcetv.com/hls/cctv4.m3u8$LR•IPV4•89『线路47』
@@ -279,6 +279,7 @@ NOW NEWS,http://cdn.163189.xyz/163189/now$LR•IPV4
 凤凰卫视香港台,http://r.jdshipin.com/yDoTN$LR•IPV4•4『线路3』
 凤凰卫视香港台,https://cdn.qd.je/163189/fhhk$LR•IPV4•4『线路4』
 台视新闻,http://38.64.72.148/hls/modn/list/4013/chunklist1.m3u8$LR•IPV4
+中视,https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 
 更新时间,#genre#
 关于本源(iptv365.org),https://gitlab.com/p2v5/wangtv/-/raw/main/about1080p.mp4$LR•IPV4
@@ -690,7 +691,6 @@ TVBJ1,https://cdn.qd.je/163189/j1$LR•IPV4
 TVB1,https://cdn.qd.je/163189/tvb1$LR•IPV4
 
 台湾台📶,#genre#
-中视HD,https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 HISTORY,http://37.49.224.5/stream/12/index.m3u8$LR•IPV4•31『线路1』
 HISTORY,http://116.90.120.149:8000/play/a0l1/index.m3u8$LR•IPV4•31『线路2』
 HISTORY,http://138.121.15.230:9002/HISTORY-2/index.m3u8$LR•IPV4•31『线路3』
@@ -1266,11 +1266,6 @@ CCTV兵器科技,https://live.264788.xyz/channel/bingqikeji?streamid=530cb4e58bb
 绍兴电视台公共,http://live.shaoxing.com.cn/video/s10001-sxtv2/index.m3u8?%E5%85%B3%E6%B3%A8%E5%BE%AE%E4%BF%A1%E5%85%AC%E4%BC%97%E5%8F%B7[%E6%99%B4%E5%9B%AD]$LR•IPV4
 绍兴公共,http://live.shaoxing.com.cn/video/s10001-sxtv2/index.m3u8$LR•IPV4
 义乌新闻综合,https://44911.hlsplay.aodianyun.com/tv_radio_44911/tv_channel_1796.m3u8?auth_key=4830573978-0-0-92824c2c03f95906a3c49a4aa28f1709&extra_key=Yc1XsmxOKy2UBoPM4Wy5vCPsEYqnj06taCR2SRB2Xrg2w28NPilH03KdIbbM5wgSql-VBohSnoO9AOKl94q2t2DWMftz-XB-2qUX-UjXcS80StcSZahBFjrKLivXaRjiY5r2NOMKWMKFbv-S0Bz2G6iEXgCK8yGjtrFHDcPfAQEE0pvXq0Bwy34b7We8zARN&ali_ffmpeg_version=mpengine$LR•IPV4
-浙江经济,https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•5『线路1』
-浙江经济,https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8?$LR•IPV4•5『线路2』
-浙江经济,http://ali-m-l.cztv.com/channels/lantian/channel03/720p.m3u8$LR•IPV4•5『线路3』
-浙江经济,http://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8$LR•IPV4•5『线路4』
-浙江经济,http://ali-vl.cztv.com/channels/lantian/channel003/360p.m3u8$LR•IPV4•5『线路5』
 浙江钱江,https://ali-m-l.cztv.com/channels/lantian/channel002/1080p.m3u8$LR•IPV4•4『线路1』
 浙江钱江,http://l.cztvcloud.com/channels/lantian/SXyuyao2/720p.m3u8$LR•IPV4•4『线路2』
 浙江钱江,http://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8$LR•IPV4•4『线路3』
