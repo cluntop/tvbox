@@ -51,6 +51,18 @@ ext 可选：
   代理滚动缓冲(proxy) 与 官方直连 302(redirect) 之间切换
 - 入口：live(直播 M3U) / site(点播分类+详情) / diag 三种模式共用同一份频道表
 - 依赖：纯标准库，内置纯 Python AES-256-GCM 与 RSA-OAEP，不需要装加解密包
+
+v11.2 适配说明（相对 ysp-live v9.5 基线的增量）：
+- 限流分类对齐：jce/bk 的「过于频繁」统一升为 RateLimitedError，「地区/版权」升为
+  版权受限 RuntimeError，交由上层决定退避/换源/重取（此前 jce 侧不分类，
+  _refresh_native 的 except RateLimitedError 永不触发，切 bk 是死代码）
+- ALIAS_MAP(38 条) + _canon_slug：外部 M3U/配置写长名(xinjiangws/cctv16hd/…)、
+  大写、带 .m3u8、带前后斜杠都能落到正确频道
+- _native_throttle：jce 两次调用至少隔 0.7s±0.25s，对齐 v11.2 ApiFlowLimiter
+- DNS 解析纳入超时：出网期间压住 socket 默认超时，真机 DNS 抖动不再把
+  单次 refresh 拖到 28s+
+- 刻意未移植：LiveTimeline(本源自有 seq 单调计数 + SWR 兜底已覆盖同样目标)、
+  relay 令牌/分片中继、ffmpeg/ysp-engine.js 伴生引擎（爬虫上下文无 subprocess/端口）
 """
 
 import base64, gzip, hashlib, hmac as _hmac, http.cookiejar, json, os, random, re, socket, struct, threading, time
@@ -262,6 +274,26 @@ def _unwrap(data):
  return rc.get(1) or b''
 
 
+# 复用 v11.2 的类目划分：限流/版权封锁与「真无数据」必须分开，
+# 否则播放器一看到 503 就退避耗尽断流，而实际等 3-5 秒就能恢复。
+_RATE_LIMIT_MARKS = ('过于频繁', '请稍后再试', '频繁', '限流', '访问过热', 'too many')
+_RIGHTS_MARKS = ('地区', '版权', '暂停提供直播', '暂不提供', '未授权', '不受理')
+
+
+class RateLimitedError(RuntimeError):
+ pass
+
+
+def _is_rate_limit(msg):
+ text = str(msg or '')
+ return any(m in text for m in _RATE_LIMIT_MARKS)
+
+
+def _is_rights_restricted(msg):
+ text = str(msg or '')
+ return any(m in text for m in _RIGHTS_MARKS)
+
+
 class DeadHostError(RuntimeError):
  pass
 
@@ -281,7 +313,16 @@ def jce_timeshift_url(pid, sid, start, end, stream='fhd'):
  if not resp_body: raise RuntimeError('bad response')
  m = R(resp_body).struct()
  err = m.get(0, 0)
- if err != 0: raise RuntimeError(m.get(1, 'errCode=%s' % err))
+ if err != 0:
+  reason = m.get(1, 'errCode=%s' % err)
+  # 与 bk_playurls 保持同一套分类口径：限流是"临时不可用"（必须退避/换源），
+  # 版权封锁是"真不可用"（换源也没用）。不分类的话 _refresh_native 的
+  # except RateLimitedError 永远不会被触发，"jce 限流立刻切 bk"就是死代码。
+  if _is_rate_limit(reason):
+   raise RateLimitedError('jce 限流: %s' % reason)
+  if _is_rights_restricted(reason):
+   raise RuntimeError('jce 版权受限: %s' % reason)
+  raise RuntimeError(reason)
  url = m.get(2, '')
  if not url: raise RuntimeError('empty m3u8')
  if 'liverecord.video.cloud.cctv.com' in url:
@@ -394,7 +435,14 @@ def bk_playurls(channel_id, live_pid, defn='fhd'):
   raise RuntimeError('bk HTTP %d' % st)
  p = json.loads(body.decode('utf-8', 'replace'))
  if int(p.get('iretcode', -1)) != 0:
-  raise RuntimeError('iretcode=%s %s' % (p.get('iretcode'), p.get('errinfo', '')))
+  reason = str(p.get('errinfo', '') or '')
+  # v11.2：版权封锁是"真不可用"（换源也没用），限流是"临时不可用"（必须退避重试），
+  # 两者都从通用 RuntimeError 里拆出来，交由上层决定冷却/换源/重取
+  if _is_rate_limit(reason):
+   raise RateLimitedError('bk 限流: %s' % reason)
+  if _is_rights_restricted(reason):
+   raise RuntimeError('bk 版权受限: %s' % reason)
+  raise RuntimeError('iretcode=%s %s' % (p.get('iretcode'), reason))
  urls = []
  if p.get('playurl'): urls.append(p['playurl'])
  bu = p.get('backurl_list') or p.get('backurlList') or p.get('backurl')
@@ -2757,9 +2805,10 @@ CHANNELS = [
  ('shanxiws', '山西卫视', '2025560803', '600190407', 'fhd', None),
  ('qhws', '青海卫视', '2025559103', '600190406', 'fhd', None),
  ('xizangws', '西藏卫视', '2025558003', '600190403', 'fhd', None),
- ('xjws', '新疆卫视', '2019927403', '600152138', 'fhd', None),
+ ('xjws', '新疆卫视', '2050898603', '600152138', 'fhd', None),
  ('cetv1', 'CETV-1', '2022823801', '600171827', 'fhd', None),
  ('guoxue', '国学频道', '2029360403', '600213139', 'fhd', None),
+ ('gsws', '甘肃卫视', '2025561703', '600190408', 'fhd', None),
 ]
 
 CHANNEL_MAP = {c[0]: {'slug': c[0], 'name': c[1], 'sid': c[2], 'pid': c[3], 'defn': c[4], 'cast': c[5]} for c in CHANNELS}
@@ -2767,11 +2816,41 @@ CHANNEL_MAP = {c[0]: {'slug': c[0], 'name': c[1], 'sid': c[2], 'pid': c[3], 'def
 # 投屏（设备模拟）频道 -> 央视频 live_id
 CAST_LIVE_IDS = {c[0]: c[5] for c in CHANNELS if c[5]}
 
+# v11.2 的 slug 别名表：上游工具/直播源常用「xinjiangws」「cctv16hd」这类长名，
+# 本源的频道表跟 v11.2 共用一个 key 空间，所以在这里做一次归一化，
+# 让外部 M3U / 配置里写长名也能落到正确的频道上。
+ALIAS_MAP = {
+ 'anhuiws': 'ahws', 'beijingws': 'bjws', 'cctv16hd': 'cctv16',
+ 'cctv5plus': 'cctv5p', 'cctvdiyijuchang': 'cctvdyjc',
+ 'cctvfengyunjuchang': 'cctvfyjc', 'cctvhuaijiujuchang': 'cctvhjjc',
+ 'cgtnalaboyu': 'cgtnar', 'cgtneyu': 'cgtnru', 'cgtnfayu': 'cgtnfr',
+ 'cgtnwaiyujilu': 'cgtndoc', 'cgtnxibanyayu': 'cgtnnes',
+ 'chongqingws': 'cqws', 'dongfangws': 'dfws', 'fujiandongnanws': 'dnws',
+ 'guangdongws': 'gdws', 'guangxiws': 'gxws', 'guizhouws': 'gzws',
+ 'hebeiws': 'hebws', 'heilongjiangws': 'hljws', 'hubeiws': 'hbws',
+ 'hunanws': 'hnws', 'jiangsuws': 'jsws', 'jiangxiws': 'jxws',
+ 'jilinws': 'jlws', 'liaoningws': 'lnws', 'neimengguws': 'nmgws',
+ 'ningxiaws': 'nxws', 'qinghaiws': 'qhws', 'shandongws': 'sdws',
+ 'shannxiws': 'saxws', 'shenzhenws': 'szws', 'sichuanws': 'scws',
+ 'tianjinws': 'tjws', 'xinjiangws': 'xjws', 'yunnanws': 'ynws',
+ 'zhejiangws': 'zjws', 'gansuws': 'gsws',
+}
+
 CAST_SLUG_SUFFIX = '_cast'
 
 
+def _canon_slug(slug):
+ """把外部传入的 slug 归一化：小写、剥 .m3u8、走 ALIAS_MAP。"""
+ s = str(slug or '').strip().strip('/').lower()
+ if s.endswith('.m3u8'):
+  s = s[:-5]
+ s = s.split('?')[0].split('#')[0]
+ return ALIAS_MAP.get(s, s)
+
+
 def _base_slug(slug):
- return slug[:-len(CAST_SLUG_SUFFIX)] if slug.endswith(CAST_SLUG_SUFFIX) else slug
+ s = _canon_slug(slug)
+ return s[:-len(CAST_SLUG_SUFFIX)] if s.endswith(CAST_SLUG_SUFFIX) else s
 
 
 def _cast_slug(slug):
@@ -2956,9 +3035,32 @@ def _parse_m3u8(text, base_url):
  return segs
 
 
+# 限流退避：vv11.2 用 ApiFlowLimiter 把 jce/bk 请求间隔拉到 ~1s，
+# 本文件把上象限留在 refresh loop 里，用退避 + 备用通道兜住限流窗口。
+_NATIVE_LIMITER_LOCK = threading.Lock()
+_NATIVE_LAST_CALL = [0.0]
+NATIVE_MIN_INTERVAL = 0.7
+NATIVE_JITTER = 0.25
+
+
+def _native_throttle():
+ """限流闸门：与 v11.2 ApiFlowLimiter 对齐，jce 两次调用之间至少隔 NATIVE_MIN_INTERVAL。"""
+ try:
+  with _NATIVE_LIMITER_LOCK:
+   now = time.time()
+   target = NATIVE_MIN_INTERVAL + random.uniform(0, NATIVE_JITTER)
+   wait = target - (now - _NATIVE_LAST_CALL[0])
+   if wait > 0:
+    time.sleep(wait)
+   _NATIVE_LAST_CALL[0] = time.time()
+ except Exception:
+  pass
+
+
 def _jce_refresh(ch):
  ch.headers = {'User-Agent': UA}
  now = int(time.time())
+ _native_throttle()
  m3u8_url = jce_timeshift_url(ch.pid, ch.sid, now - WINDOW, now, ch.defn)
  st, body, _ = _http('GET', m3u8_url, {'User-Agent': UA}, None, HTTP_TIMEOUT)
  if st < 200 or st >= 300:
@@ -2997,6 +3099,12 @@ def _bk_refresh(ch):
      pass
   except Exception as e:
    last_err = '%s: %s' % (type(e).__name__, e)
+   # 限流时不要写回缓存：签名地址短时效，把限流窗口里的旧地址存下来
+   # 只会让下一轮继续拿 403，圈在死循环里。立刻丢缓存等重取新签名。
+   if _is_rate_limit(str(e)) or _is_rights_restricted(str(e)):
+    try: _BK_URL_CACHE.pop(bk_key, None)
+    except Exception: pass
+    break
    try:
     _BK_URL_CACHE.pop(bk_key, None)
    except Exception:
@@ -3040,13 +3148,20 @@ def _refresh_native(ch):
    # FORCE_BK 频道的 jce CDN 已确认是死链（DeadHostError），
    # 再 fallback 只会白等 jce 超时后抛错，把单次 refresh 拖到 15s+
    if ch.slug in FORCE_BK: raise
-   _log('%s bk failed (%s), fallback jce' % (ch.slug, e))
+   # 限流/版权封锁同样不值得换源重试：bk 自己吐的错，jce 也会吐
+   if _is_rate_limit(str(e)) or _is_rights_restricted(str(e)): raise
    ch.mode = 'jce'
    return _jce_refresh(ch)
  try:
   return _jce_refresh(ch)
  except DeadHostError:
   ch.mode = 'bk'
+  return _bk_refresh(ch)
+ except RateLimitedError:
+  # jce 限流立刻让位给 bk 备用通道——bk 与 jce 是不同后端，
+  # 一边限流另一边常常还有额度，这样播放器不会撞到空窗
+  ch.mode = 'bk'
+  _log('%s jce rate-limited, switch bk' % ch.slug)
   return _bk_refresh(ch)
 
 
@@ -3094,7 +3209,7 @@ def _cast_refresh(ch):
  return True
 
 
-_PREFETCH_COUNT = 28  # 预取上限：覆盖整个播放窗口(16) + 余量
+_PREFETCH_COUNT = 28   # 预取上限：覆盖整个播放窗口(16) + 余量
 _PREFETCH_DELAY = 0.12  # 预取间隔，避免瞬间打爆 CDN 触发风控
 
 
@@ -3169,7 +3284,9 @@ def _refresh_loop(ch):
  while time.time() - ch.last_access < IDLE_TIMEOUT:
   ok = _refresh_once(ch)
   fails = 0 if ok else fails + 1
-  time.sleep(REFRESH_INTERVAL if fails < 3 else 5)  # v9.0 失败冷却 5s，快速重试换线路/签名
+  # v9.0 失败冷却 5s（快速重试换线路/签名）；v11.2 用 30s 但那边 refresh 只需 ~1s，
+  # 本源 refresh 实测 1.4-1.7s，冷却一样保持 5s，限流退避交给 _native_throttle
+  time.sleep(REFRESH_INTERVAL if fails < 3 else 5)
 
 
 def _ensure_channel(ch):
@@ -3330,10 +3447,58 @@ class _Net(object):
 DIRECT = False
 _NET = _Net()
 
+# socket 级默认超时：urllib 的 timeout 只管 connect/read，
+# 不覆盖 getaddrinfo。真机 DNS 抖动时解析会一直挂住——
+# 实测 bkliveinfo 传 timeout=8 却耗了 28s（Linux resolver 默认 5s×多次重试），
+# 把单次 refresh 拖到 28s+，播放列表停摆到窗口签名全过期。
+# 这里在出网期间把解析也压到 scoped timeout，让每次「解析失败」变成一次可控的 599。
+#
+# 注意：socket.setdefaulttimeout 是进程级设置，而 refresh / 预取 / 取段三处会并发
+# 调 _http() 且各自的 timeout 不同。直接"设进去-退出恢复"会互相覆盖，
+# 所以这里用引用计数取「当前所有活跃出网调用里的最小值」作为上限：
+# 最慢的那个调用也不会被拖过界，且退出后一定能收敛回 None。
+_DNS_SCOPE_TIMEOUT = 6.0
+_SCOPE_LOCK = threading.Lock()
+_SCOPE_STACK = []
+_SCOPE_BASE = None
+
+
+def _scope_in(seconds):
+ global _SCOPE_BASE
+ with _SCOPE_LOCK:
+  if not _SCOPE_STACK:
+   _SCOPE_BASE = socket.getdefaulttimeout()
+  _SCOPE_STACK.append(float(seconds))
+  socket.setdefaulttimeout(min(_SCOPE_STACK))
+
+
+def _scope_out():
+ global _SCOPE_BASE
+ with _SCOPE_LOCK:
+  if _SCOPE_STACK:
+   _SCOPE_STACK.pop()
+  socket.setdefaulttimeout(min(_SCOPE_STACK) if _SCOPE_STACK else _SCOPE_BASE)
+
+
+class _ScopedTimeout(object):
+ """上下文内压住 socket 默认超时（主要作用于 getaddrinfo）。"""
+
+ def __init__(self, seconds):
+  self.seconds = float(seconds)
+
+ def __enter__(self):
+  _scope_in(self.seconds)
+
+ def __exit__(self, *exc):
+  _scope_out()
+  return False
+
 
 def _http(method, url, headers=None, body=None, timeout=15):
  """统一 HTTP 出口，返回 (status, bytes, headers)。"""
- return _NET.request(method, url, headers, body, timeout)
+ scoped = max(1.0, min(float(timeout or 15), _DNS_SCOPE_TIMEOUT))
+ with _ScopedTimeout(scoped):
+  return _NET.request(method, url, headers, body, timeout)
 
 
 def _one(value):
@@ -3631,8 +3796,8 @@ class Spider(SpiderBase):
 
  def detailContent(self, ids):
   raw = ids[0] if isinstance(ids, (list, tuple)) else ids
-  slug = _one(raw).strip()
-  base = _base_slug(slug)
+  slug = _base_slug(_one(raw))
+  base = slug
   info = CHANNEL_MAP.get(base)
   if not info:
    return {"list": []}
@@ -3673,12 +3838,12 @@ class Spider(SpiderBase):
   return {"page": 1, "pagecount": 1, "limit": len(cards), "total": len(cards), "list": cards}
 
  def playerContent(self, flag, id, vipFlags):
-  slug = _one(id).strip()
+  slug = _base_slug(_one(id))
   if slug.startswith("http://") or slug.startswith("https://"):
    # 外部 m3u8 直链：挂到本代理 type=m3u8 分支，由 _ext_media 展开主表、
    # 把段/密钥 URI 改写为绝对代理地址——否则相对路径(如 ../key、/hls_key/)
    # 会以 127.0.0.1 本地代理为基准解析请求不存在的路由，ExoPlayer 404 断流
-   # position 字段已按需求移除：不再由 spider 覆盖历史进度，恢复行为交回壳端
+    # position 字段已按需求移除：不再由 spider 覆盖历史进度，恢复行为交回壳端
    return {"parse": 0, "playUrl": "",
     "url": self._purl(type="m3u8", url=slug),
     "header": {"User-Agent": UA, "Referer": "https://live.cctv.cn/"},
@@ -3698,8 +3863,8 @@ class Spider(SpiderBase):
    # 自有频道入口也带 type=m3u8 标记：壳/日志可识别该流走本代理 m3u8 链路；
    # _localProxyRaw 中 type=m3u8+slug 组合继续走滚动直播播放列表分支
    "url": self._purl(type="m3u8", slug=slug),
-   "header": header,
-  }
+    "header": header,
+   }
 
  # ---------------- 直播源 M3U ----------------
  def liveContent(self, url=""):
@@ -3761,7 +3926,7 @@ class Spider(SpiderBase):
     # type=m3u8 且带 slug 时不进此分支：那是自有频道入口（type=m3u8&slug=...），
     # 继续往下走滚动直播播放列表，段 URL 已是绝对代理地址无需改写
     return self._ext_media(kind, query)
-   slug = query.get("slug") or query.get("id") or ""
+   slug = _canon_slug(query.get("slug") or query.get("id") or "")
    ch = CHANNEL_STATE.get(slug)
    if ch is None:
     return [404, "text/plain; charset=utf-8", "央视频: 未知频道 " + slug]
