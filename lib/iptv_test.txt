@@ -40,12 +40,12 @@ CCTV,http://74.91.26.218:82/live/cctv10hd.m3u8$LR•IPV4•87『线路31』
 CCTV,http://38.75.136.137:98/gslb/dsdqpub/sjdl.m3u8?auth=testpub$LR•IPV4•87『线路32』
 CCTV,http://74.91.26.218:82/live/cctv17hd.m3u8$LR•IPV4•87『线路33』
 CCTV,http://38.75.136.137:98/gslb/dsdqpub/hjjc.m3u8?auth=testpub$LR•IPV4•87『线路34』
-CCTV,https://piccpndks.v.kcdnvip.com/audio/cctv6_2/index.m3u8$LR•IPV4•87『线路35』
-CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=6db4fdf4db82e0e3d527718d7c5aaad4$LR•IPV4•87『线路36』
-CCTV,https://live.264788.xyz/channel/diyijuchang?streamid=e9b0fb1ca135a4aeae12944494883794&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•87『线路37』
-CCTV,https://p2.bdstatic.com/rtmp.liveshow.lss-user.baidubce.com/live/stream_bduid_6488563992_8982723413/merged_1707497046297_88536_25144_41936.m3u8$LR•IPV4•87『线路38』
-CCTV,https://event.pull.hebtv.com/jishi/cp1.m3u8$LR•IPV4•87『线路39』
-CCTV,https://event.pull.hebtv.com/jishi/cp2.m3u8$LR•IPV4•87『线路40』
+CCTV,https://p2.bdstatic.com/rtmp.liveshow.lss-user.baidubce.com/live/stream_bduid_6488563992_8982723413/merged_1707497046297_88536_25144_41936.m3u8$LR•IPV4•87『线路35』
+CCTV,https://event.pull.hebtv.com/jishi/cp1.m3u8$LR•IPV4•87『线路36』
+CCTV,https://event.pull.hebtv.com/jishi/cp2.m3u8$LR•IPV4•87『线路37』
+CCTV,https://piccpndks.v.kcdnvip.com/audio/cctv6_2/index.m3u8$LR•IPV4•87『线路38』
+CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=6db4fdf4db82e0e3d527718d7c5aaad4$LR•IPV4•87『线路39』
+CCTV,https://live.264788.xyz/channel/diyijuchang?streamid=e9b0fb1ca135a4aeae12944494883794&livekey=01WgOR41rriMmMkzNsd0UoaxJRwetZdxIvtVk$LR•IPV4•87『线路40』
 CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=0101478de5b98fb9102f4b6843d41332$LR•IPV4•87『线路41』
 CCTV,https://live-play-hls.cctvnews.cctv.com/CCTVChannel/channel_cctv4_mbd.m3u8?auth_key=1795330800-1-b59134a2ead43d7f783f943c8f535e7bb80c5169575b2e8efcd5b3ddea21b41c-0d6e78f8ce4c06397c9fa8890069b337&yid=b59134a2ead43d7f783f943c8f535e7bb80c5169575b2e8efcd5b3ddea21b41c$LR•IPV4•87『线路42』
 CCTV,https://v4-702cae17a28d6e4f0c0002bba021d934.livehwc4.com/play.kankanlive.com/live/1698423397390920.m3u8?sub_m3u8=true&edge_slice=true&user_session_id=c012d32634f37806e4b0713c9773272f$LR•IPV4•87『线路43』
@@ -260,8 +260,8 @@ NOW NEWS,http://cdn.163189.xyz/163189/now$LR•IPV4
 龙华经典,https://cdn8.163189.xyz/live/lhjd/stream.m3u8$LR•IPV4
 龙华戏剧,https://cdn8.163189.xyz/live/lhxj/stream.m3u8$LR•IPV4
 凤凰卫视中文台,http://43.152.224.209/qctv.fengshows.cn/live/0701pcc72.flv$LR•IPV4
-凤凰卫视资讯台,http://43.152.224.209/qctv.fengshows.cn/live/0701pin72.flv$LR•IPV4•3『线路1』
-凤凰卫视资讯台,http://221.7.175.154:8445/tsfile/live/1021_1.m3u8?key=txiptv&playlive=1&authid=0$LR•IPV4•3『线路2』
+凤凰卫视资讯台,http://221.7.175.154:8445/tsfile/live/1021_1.m3u8?key=txiptv&playlive=1&authid=0$LR•IPV4•3『线路1』
+凤凰卫视资讯台,http://43.152.224.209/qctv.fengshows.cn/live/0701pin72.flv$LR•IPV4•3『线路2』
 凤凰卫视资讯台,http://php.jdshipin.com/TVOD/iptv.php?id=fhzx$LR•IPV4•3『线路3』
 凤凰卫视香港台,http://r.jdshipin.com/NfC0f$LR•IPV4•3『线路1』
 凤凰卫视香港台,http://php.jdshipin.com/TVOD/iptv.php?id=fhhk$LR•IPV4•3『线路2』
@@ -1251,6 +1251,10 @@ CCTV风云音乐,https://live.264788.xyz/channel/fengyunyinyue?streamid=1b41fb91
 浙江钱江,https://ali-m-l.cztv.com/channels/lantian/channel002/1080p.m3u8$LR•IPV4•3『线路1』
 浙江钱江,http://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8$LR•IPV4•3『线路2』
 浙江钱江,http://l.cztvcloud.com/channels/lantian/SXyuyao2/720p.m3u8$LR•IPV4•3『线路3』
+浙江经济,https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•4『线路1』
+浙江经济,https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8?$LR•IPV4•4『线路2』
+浙江经济,http://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8$LR•IPV4•4『线路3』
+浙江经济,http://ali-m-l.cztv.com/channels/lantian/channel03/1080p.m3u8#https://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8#http://ali-m-l.cztv.com/channels/lantian/channel003/1080p.m3u8$LR•IPV4•4『线路4』
 
 广东,#genre#
 广州竞赛,http://8.138.7.223/tv/gzjs.m3u8$LR•IPV4
