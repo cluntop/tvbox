@@ -67,6 +67,11 @@ const CONFIG = {
 
   // 未命中反代路径时交给静态资源（Pages/Workers Assets）
   serveAssetsOnMiss: true,
+
+  // 遗留路径 -> 自动补 /emby 前缀再反代
+  // 例: /system -> /emby/system ; /System/Info/Public -> /emby/System/Info/Public
+  // 只匹配这些前缀本身或其子路径，不做全局兜底
+  legacyPrefixes: ["/system"],
 };
 
 const HOP_BY_HOP = [
@@ -112,9 +117,25 @@ async function fetchWithRetry(budget, buildRequest, method, reserve = 0) {
 
 function matchRoute(pathname) {
   const lower = pathname.toLowerCase();
-  return (
-    CONFIG.routes.find(r => lower === r.prefix || lower.startsWith(r.prefix + "/")) || null
+
+  // 1) 正常前缀路由
+  const route = CONFIG.routes.find(
+    r => lower === r.prefix || lower.startsWith(r.prefix + "/")
   );
+  if (route) return { route, path: pathname, legacy: false };
+
+  // 2) 遗留路径: /system -> /emby/system（仅限 legacyPrefixes）
+  if (
+    CONFIG.legacyPrefixes.some(p => lower === p || lower.startsWith(p + "/")) &&
+    pathname !== "/"
+  ) {
+    const embyRoute = CONFIG.routes.find(r => r.prefix === "/emby");
+    if (embyRoute) {
+      return { route: embyRoute, path: "/emby" + pathname, legacy: true };
+    }
+  }
+
+  return null;
 }
 
 function emosHeaders(proxyId, proxyName) {
@@ -191,17 +212,30 @@ function withCors(request, headers) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const route = matchRoute(url.pathname);
 
-    // 非反代路径：交给静态资源
-    if (!route) {
-      if (!CONFIG.serveAssetsOnMiss) return new Response("Not Found", { status: 404 });
-      // Workers + Assets 绑定
-      if (env && env.ASSETS && typeof env.ASSETS.fetch === "function") {
-        return env.ASSETS.fetch(request);
+    const matched = matchRoute(url.pathname);
+
+    // 非反代路径：静态资源 / 404
+    if (!matched) {
+      if (CONFIG.serveAssetsOnMiss) {
+        if (env && env.ASSETS && typeof env.ASSETS.fetch === "function") {
+          return env.ASSETS.fetch(request);
+        }
+        return fetch(request);
       }
-      // Pages 高级模式 (_worker.js)：直接 fetch 原请求即可命中静态资源
-      return fetch(request);
+      return new Response("Not Found", { status: 404 });
+    }
+
+    const route = matched.route;
+
+    // 遗留路径命中: /system -> /emby/system
+    // GET/HEAD 用 302 跳转；其它方法(如登录 POST)内部改写，避免 302 把 POST 变 GET
+    if (matched.legacy) {
+      const target = new URL(matched.path + url.search, url.origin).toString();
+      if (request.method === "GET" || request.method === "HEAD") {
+        return Response.redirect(target, 302);
+      }
+      url.pathname = matched.path;
     }
 
     const proxyId = (env && env.EMOS_PROXY_ID) || CONFIG.proxyId;
