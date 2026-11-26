@@ -6660,96 +6660,276 @@ def _hg_app_episode_list(video_data: dict) -> list[dict]:
 #   2) GET  /video/fplay/1/<hash>/<bid>            -> 5 档清晰度(main_url/spade_a/kid/key_seed)
 # App 也会把 video_model 落盘到自己的 mmkv 缓存，这里直接复用该缓存，
 # 避免依赖已停服的 multi_video_model。
-_HG_APP_CACHE = "/data/user/0/com.phoenix.read/files/mmkv/prefix_private_base_video_model_disk_cache"
-# 红果把播放模型分散写进多个 MMKV 文件；video_model_disk_cache 只覆盖播放过的集数，
-# series_mall_landing_video_cache（约 16MB）里还带一批 vid -> fplay 凭据。
-# 两个文件都是 u0_a256 私有（-rwx------），宿主不是同一 uid 时直接 open 会 PermissionError，
-# 因此这里再退一步用 root 读一次（设备已 root 是部署前提）。
-# 2026-11-24 取证修正：
-#   1) App 私有目录是 /data/data/<pkg>（不是 /data/user/0/<pkg>），后者不存在，
-#      原路径导致缓存永远读不到（实测 _hg_app_cache_models() 返回 0 条）。
-#   2) 两个文件都是 u0_a256 私有 (-rwx------)，宿主同 uid 才能直接 open，
-#      否则走 su 读（_hg_app_cache_blob 已支持）。
-#   3) root 导出的外部副本也作为候选（宿主无 root 时可由 root 侧预先导出）。
-_HG_APP_CACHE_CANDIDATES = (
- _HG_APP_CACHE,
- "/data/data/com.phoenix.read/files/mmkv/prefix_private_base_video_model_disk_cache",
- "/data/data/com.phoenix.read/files/mmkv/series_mall_landing_video_cache",
- "/storage/emulated/0/hg_work/hg_vm_cache.bin",
- "/storage/emulated/0/hg_work/hg_landing.bin",
+#
+# 2026-11-24 改造：不再用写死的路径常量引用缓存文件，改为运行时自解析。
+#   旧写法（_HG_APP_CACHE / _HG_APP_CACHE_CANDIDATES）把 5 条路径硬编码在源码里，
+#   必然在下列任一种情况下失效：
+#     1) App 私有目录有 /data/data/<pkg> 与 /data/user/0/<pkg> 两种视图，
+#        写死其中一个在部分设备上永远读不到（实测 /data/user/0/<pkg> 不存在，
+#        _hg_app_cache_models() 恒 0 条）；
+#     2) 红果把播放模型分散写进多个 MMKV 文件（video_model_disk_cache 只覆盖播放过的
+#        集数，series_mall_landing_video_cache 里还有另一批 vid -> fplay 凭据），
+#        文件名随版本变化，硬编码清单必然漏；
+#     3) root 导出副本的文件名不固定（hg_vm_cache3.bin / vm_cache_now2.bin / ...）。
+#   现在按「目录 + 文件名特征」在运行时枚举（_hg_app_cache_candidates），
+#   root 导出副本只作为降级来源（_hg_app_cache_export_candidates）。
+_HG_APP_PACKAGE = "com.phoenix.read"
+# App 私有数据目录候选（按优先级；使用前逐个判存在）。
+_HG_APP_DATA_ROOTS = (
+ "/data/data/%s" % _HG_APP_PACKAGE,
+ "/data/user/0/%s" % _HG_APP_PACKAGE,
 )
-
+# MMKV 缓存目录（相对 App 数据根）。
+_HG_APP_MMKV_SUBDIR = "files/mmkv"
+# 名字特征（小写比较）：命中任一即认为是 App 播放模型缓存。
+_HG_APP_CACHE_NAME_HINTS = (
+ "video_model_disk_cache",
+ "landing_video_cache",
+ "video_cache",
+ "play_model",
+)
+# root 导出副本目录 + 名字特征（宿主读不到 App 私有目录时的降级来源）。
+_HG_APP_CACHE_EXPORT_DIRS = (
+ "/storage/emulated/0/hg_work",
+ "/sdcard/hg_work",
+ "/storage/emulated/0/Download/hg_work",
+)
+_HG_APP_CACHE_EXPORT_HINTS = ("vm_cache", "video_model", "landing_video", "series_mall")
+# 发现结果缓存：避免一集播放里反复 listdir / 拉 su。
+_HG_APP_CACHE_DISC_TTL = 120
+_HG_APP_CACHE_DISC: dict = {}
 _HG_APP_CACHE_BLOB_CACHE: dict = {}
+# 读不到 mtime（跨 uid / SELinux）时按 TTL 复用；能读到 mtime 就按 mtime 失效。
+_HG_APP_CACHE_BLOB_TTL = 30
 # 确认不存在（宿主不可见）的候选路径负缓存：避免每次调用都去拉 su 试一遍。
 _HG_APP_CACHE_BLOB_MISS_TTL = 60
 _HG_APP_CACHE_BLOB_MISS: dict = {}
 
+def _hg_root_run(argv: list, timeout: int = 20) -> tuple:
+ """执行一条 root 命令 -> (returncode, stdout)。不可用或超时返回 (-1, b"")。"""
+ import subprocess as _sp
+ try:
+  done = _sp.run(argv, stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=timeout)
+  return done.returncode, (done.stdout or b"")
+ except Exception:
+  return -1, b""
+
+def _hg_root_listdir(path: str) -> list:
+ """列目录：先直接 listdir，失败再走 root ls；不可见且无 root 时返回 []。"""
+ if not path:
+  return []
+ try:
+  return sorted(os.listdir(path))
+ except Exception:
+  pass
+ for argv in (["su", "-c", "ls -1 %s" % path], ["su", "0", "ls", "-1", path]):
+  rc, out = _hg_root_run(argv, 15)
+  if rc != 0 or not out:
+   continue
+  names = []
+  for line in out.decode("utf-8", "replace").splitlines():
+   name = line.strip()
+   if name and "/" not in name:
+    names.append(name)
+  if names:
+   return sorted(names)
+ return []
+
+def _hg_root_is_file(path: str) -> bool:
+ """判文件存在：直接 stat 优先，失败再 root test -f。"""
+ if not path:
+  return False
+ try:
+  return os.path.isfile(path)
+ except Exception:
+  pass
+ for argv in (["su", "-c", "test -f %s" % path], ["su", "0", "test", "-f", path]):
+  rc, _out = _hg_root_run(argv, 10)
+  if rc == 0:
+   return True
+ return False
+
+def _hg_app_cache_env_path() -> str:
+ """显式指定的缓存路径（环境变量 HG_APP_CACHE / HG_APP_CACHE_FILE），没有则空串。"""
+ for key in ("HG_APP_CACHE", "HG_APP_CACHE_FILE"):
+  value = (os.environ.get(key) or "").strip()
+  if value:
+   return value
+ return ""
+
+def _hg_dedupe_paths(paths) -> list:
+ """按底层 inode 去重（保序），同一文件只保留第一次出现的写法。
+
+    实测（Android 12 / FUSE）：/sdcard 与 /storage/emulated/0 是两个独立挂载点，
+    os.path.realpath() 并不相等，但两者指向同一底层 inode。若不按 inode 去重，
+    同一份 2MB/16MB 缓存会被读两遍、解析两遍，root 导出目录的 oracle 文件也会翻倍。
+    键顺序：stat(dev,ino) -> realpath -> 原字符串（逐级降级，保证不误删）。
+    """
+ out: list = []
+ seen: set = set()
+ for path in paths:
+  if not path:
+   continue
+  key = ""
+  try:
+   st = os.stat(path)
+   key = "i:%d:%d" % (st.st_dev, st.st_ino)
+  except Exception:
+   key = ""
+  if not key:
+   try:
+    key = "r:" + os.path.realpath(path)
+   except Exception:
+    key = "p:" + path
+  if key in seen:
+   continue
+  seen.add(key)
+  out.append(path)
+ return out
+
+def _hg_stat_sig(path: str) -> int:
+ """取文件的 mtime_ns 作为变更标记；读不到（跨 uid）返回 0。"""
+ try:
+  return os.stat(path).st_mtime_ns
+ except Exception:
+  return 0
+
+def _hg_app_cache_candidates(force: bool = False) -> tuple:
+ """运行时枚举 App 播放模型缓存（MMKV）路径，替代写死的 _HG_APP_CACHE_CANDIDATES。
+
+    来源顺序：
+      1) 环境变量 HG_APP_CACHE / HG_APP_CACHE_FILE（调试或非常规 ROM 手指定）；
+      2) /data/data/<pkg>/files/mmkv 与 /data/user/0/<pkg>/files/mmkv 下
+         文件名命中 _HG_APP_CACHE_NAME_HINTS 的文件（跳过 .crc / .lock / .tmp）。
+    结果缓存 _HG_APP_CACHE_DISC_TTL 秒（force=True 强制重扫）。
+    """
+ now = time.time()
+ cached = _HG_APP_CACHE_DISC.get("main")
+ if not force and cached and now - cached[0] < _HG_APP_CACHE_DISC_TTL:
+  return cached[1]
+ found: list = []
+ for key in ("HG_APP_CACHE", "HG_APP_CACHE_FILE"):
+  value = (os.environ.get(key) or "").strip()
+  if value:
+   # 显式指定即唯一来源：便于排查，也便于在非常规 ROM 上手工指向导出副本。
+   result = (value,)
+   _HG_APP_CACHE_DISC["main"] = (now, result)
+   return result
+ for root in _HG_APP_DATA_ROOTS:
+  mmkv = os.path.join(root, _HG_APP_MMKV_SUBDIR)
+  for name in _hg_root_listdir(mmkv):
+   low = name.lower()
+   if low.endswith(".crc") or low.endswith(".lock") or low.endswith(".tmp"):
+    continue
+   if not any(hint in low for hint in _HG_APP_CACHE_NAME_HINTS):
+    continue
+   path = os.path.join(mmkv, name)
+   if path not in found:
+    found.append(path)
+ result = tuple(_hg_dedupe_paths(found))
+ _HG_APP_CACHE_DISC["main"] = (now, result)
+ return result
+
+def _hg_app_cache_export_candidates(force: bool = False) -> tuple:
+ """root 导出副本（宿主无 root、或 App 未安装时的降级来源）。
+
+    只在私有目录一个缓存都找不到时才使用，避免真机上多读几个 16MB 副本。
+    """
+ now = time.time()
+ cached = _HG_APP_CACHE_DISC.get("export")
+ if not force and cached and now - cached[0] < _HG_APP_CACHE_DISC_TTL:
+  return cached[1]
+ found: list = []
+ for base in _HG_APP_CACHE_EXPORT_DIRS:
+  for name in _hg_root_listdir(base):
+   low = name.lower()
+   if not low.endswith(".bin"):
+    continue
+   if not any(hint in low for hint in _HG_APP_CACHE_EXPORT_HINTS):
+    continue
+   path = os.path.join(base, name)
+   if path not in found:
+    found.append(path)
+ result = tuple(_hg_dedupe_paths(found))
+ _HG_APP_CACHE_DISC["export"] = (now, result)
+ return result
+
+def _hg_read_cache_file(path: str) -> bytes:
+ """读一个缓存文件：直接读优先，失败再 root cat；带进程内缓存 + 60s 负缓存。"""
+ if not path:
+  return b""
+ now = time.time()
+ try:
+  stamp = os.stat(path).st_mtime_ns
+ except Exception:
+  stamp = 0
+ cached = _HG_APP_CACHE_BLOB_CACHE.get(path)
+ if cached is not None:
+  if stamp and cached[0] == stamp:
+   return cached[1]
+  if not stamp and now - cached[2] < _HG_APP_CACHE_BLOB_TTL:
+   return cached[1]
+ try:
+  with open(path, "rb") as fh:
+   blob = fh.read()
+  if blob:
+   _HG_APP_CACHE_BLOB_CACHE[path] = (stamp, blob, now)
+   return blob
+ except Exception:
+  pass
+ _miss_at = _HG_APP_CACHE_BLOB_MISS.get(path) or 0
+ if _miss_at and now - _miss_at < _HG_APP_CACHE_BLOB_MISS_TTL:
+  return b""
+ # 直接读失败（跨 uid / SELinux）：先用一次轻量 test -f 判存在，
+ # 避免对宿主根本看不到的候选白拉 su 进程。
+ if not _hg_root_is_file(path):
+  _HG_APP_CACHE_BLOB_MISS[path] = now
+  return b""
+ for argv in (["su", "-c", "cat %s" % path], ["su", "0", "cat", path]):
+  rc, out = _hg_root_run(argv, 25)
+  if rc == 0 and out:
+   _HG_APP_CACHE_BLOB_CACHE[path] = (stamp, out, now)
+   _HG_APP_CACHE_BLOB_MISS.pop(path, None)
+   return out
+ return b""
+
+def _hg_app_cache_blobs() -> list:
+ """读回所有可用的 App 缓存 blob -> [(path, blob)]。
+
+    优先 App 私有 MMKV（运行时枚举）；一个都读不到时才退到 root 导出副本。
+    """
+ blobs = []
+ for path in _hg_app_cache_candidates():
+  blob = _hg_read_cache_file(path)
+  if blob:
+   blobs.append((path, blob))
+ if blobs:
+  return blobs
+ # 环境变量显式指定了就只认那一份：不再回退到导出副本，
+ # 否则排障时会静默读到旧副本，掩盖「指定路径不可读」这一事实。
+ if _hg_app_cache_env_path():
+  return blobs
+ for path in _hg_app_cache_export_candidates():
+  blob = _hg_read_cache_file(path)
+  if blob:
+   blobs.append((path, blob))
+ return blobs
+
 def _hg_app_cache_blob(path: str = "") -> bytes:
- """读一份 App MMKV 缓存；先直接读，失败再走 root。
+ """读一份 App MMKV 缓存（兼容入口：返回第一个非空 blob，或指定 path 的内容）。
 
     2026-11-24 加进程内缓存：这份文件有 2MB，且宿主多半不是 App 的 uid，
     直接 open 会 PermissionError、再退到 su cat（每次都要拉起一个 su 进程）。
     播放链路一集要查好几次（模型 / 选档 / fplay），不缓存的话首字节会被
-    这些重复的 2MB 读取 + su 拉起拖掉好几秒。按 mtime 失效即可。
+    这些重复的 2MB 读取 + su 拉起拖掉好几秒。
     """
- targets = (path,) if path else _HG_APP_CACHE_CANDIDATES
- for target in targets:
-  if not target:
-   continue
-  try:
-   stamp = os.stat(target).st_mtime_ns
-  except Exception:
-   stamp = 0
-  cached = _HG_APP_CACHE_BLOB_CACHE.get(target)
-  if cached is not None and stamp and cached[0] == stamp:
-   return cached[1]
-  blob = b""
-  try:
-   with open(target, "rb") as fh:
-    blob = fh.read()
-   if blob:
-    _HG_APP_CACHE_BLOB_CACHE[target] = (stamp, blob)
-    return blob
-  except Exception:
-   pass
-  # 负缓存：这个候选在本进程内确认不存在，短时间内不再去拉 su 试它。
-  _miss_at = _HG_APP_CACHE_BLOB_MISS.get(target) or 0
-  if _miss_at and time.time() - _miss_at < _HG_APP_CACHE_BLOB_MISS_TTL:
-   continue
-  # 直接读失败（跨 uid / SELinux）：试着用 root 读。
-  # 但先用一次轻量的 `test -e` 判存在：候选列表里常有宿主根本看不到的路径
-  # （实测前 3 个候选都不可见），直接 cat 会白拉起 2 次 su 进程。
-  _exists = False
-  for _argv in (
-   ["su", "-c", "test -e %s" % target],
-   ["su", "0", "test", "-e", target],
-  ):
-   try:
-    import subprocess as _sp
-    _done = _sp.run(_argv, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=10)
-    _exists = (_done.returncode == 0)
-   except Exception:
-    _exists = False
-   if _exists:
-    break
-  if not _exists:
-   # 确认不存在：记负缓存，60s 内不再拉 su。
-   _HG_APP_CACHE_BLOB_MISS[target] = time.time()
-   continue
-  for argv in (
-   ["su", "-c", "cat %s" % target],
-   ["su", "0", "cat", target],
-  ):
-   try:
-    import subprocess as _sp
-    done = _sp.run(argv, stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=25)
-    if done.returncode == 0 and done.stdout:
-     _HG_APP_CACHE_BLOB_CACHE[target] = (stamp, done.stdout)
-     _HG_APP_CACHE_BLOB_MISS.pop(target, None)
-     return done.stdout
-   except Exception:
-    continue
+ if path:
+  return _hg_read_cache_file(path)
+ for _path, blob in _hg_app_cache_blobs():
+  if blob:
+   return blob
  return b""
+
 
 _HG_APP_DASH_HOST = "https://vas-lf-x.snssdk.com"
 
@@ -6796,25 +6976,20 @@ def _hg_cache_record_rows(ref: Mapping[str, Any]) -> list[dict]:
  return rows
 
 # 进程内解析缓存：blob 是 2MB，一集播放要查 3 次模型（fplay / 选档 / oracle 映射），
-# 每次重新解析要 ~0.9s。按 blob 指纹（长度 + md5）失效即可：文件没变就复用。
+# 每次重新解析要 ~0.9s。按 blob 指纹（路径 + 长度 + mtime）失效：文件没变就复用。
 _HG_APP_CACHE_MODELS_CACHE: dict = {}
 
-def _hg_app_cache_models() -> dict:
- """解析 App 自己的 video_model 磁盘缓存：vid -> {bid, hash, fplay, rows}。
+def _hg_cache_parse_blob(blob: bytes) -> dict:
+ """解析一份 App MMKV 缓存 blob -> {vid: {bid, hash, fplay, video_list, ...}}。
 
- 2026-11-24 真机取证（MMKV prefix_private_base_video_model_disk_cache）：
-   每条记录形如 {"a":{"vodVideoRef":{...}},"b":..,"c":..,"d":expire,
-   "g":"<数字 vid>"}，vid 在 JSON 的 "g" 字段里（不是 key 位）。
-   记录里同时有 mFallbackApi（fplay 直链）、mBashString、mVideoList。
- """
- out = {}
- blob = _hg_app_cache_blob()
+    2026-11-24 真机取证（MMKV prefix_private_base_video_model_disk_cache）：
+      每条记录形如 {"a":{"vodVideoRef":{...}},"b":..,"c":..,"d":expire,
+      "g":"<数字 vid>"}，vid 在 JSON 的 "g" 字段里（不是 key 位）。
+      记录里同时有 mFallbackApi（fplay 直链）、mBashString、mVideoList。
+    """
+ out: dict = {}
  if not blob:
   return out
- fingerprint = (len(blob), hashlib.md5(blob).hexdigest())
- cached = _HG_APP_CACHE_MODELS_CACHE.get("blob")
- if cached is not None and cached[0] == fingerprint:
-  return dict(cached[1])
  import re as _re
  for match in _re.finditer(rb"\{\"a\":\{", blob):
   start = match.start()
@@ -6886,6 +7061,38 @@ def _hg_app_cache_models() -> dict:
    "audio_list": parsed.get("dynamic_audio_list") or [],
    "url_expire": expire,
   }
+ return out
+
+def _hg_merge_cache_models(base: dict, extra: dict) -> dict:
+ """合并两份解析结果：同一 vid 取 url_expire 更大的那条。"""
+ for vid, entry in extra.items():
+  previous = base.get(vid)
+  if previous is not None and int(previous.get("url_expire") or 0) >= int(entry.get("url_expire") or 0):
+   continue
+  base[vid] = entry
+ return base
+
+def _hg_app_cache_models() -> dict:
+ """解析 App 自己的 video_model 磁盘缓存：vid -> {bid, hash, fplay, rows}。
+
+    2026-11-24 改造：路径不再写死，候选由 _hg_app_cache_candidates() 运行时枚举；
+    多个 MMKV 文件都会解析并按 vid 的 url_expire 合并（取最新那条）。
+    进程内按 (路径, 长度, mtime) 指纹缓存：文件没变就不重复解析。
+    """
+ blobs = _hg_app_cache_blobs()
+ if not blobs:
+  return {}
+ # 指纹用 path+len+mtime：这份 blob 合计可达 26MB（多个导出副本），
+ # 每次算 md5 要多花 ~0.1s，而 mtime 变化一定能覆盖「App 重写缓存」的场景。
+ fingerprint = tuple(
+  (path, len(blob), _hg_stat_sig(path)) for path, blob in blobs
+ )
+ cached = _HG_APP_CACHE_MODELS_CACHE.get("blob")
+ if cached is not None and cached[0] == fingerprint:
+  return dict(cached[1])
+ out: dict = {}
+ for _path, blob in blobs:
+  out = _hg_merge_cache_models(out, _hg_cache_parse_blob(blob))
  _HG_APP_CACHE_MODELS_CACHE["blob"] = (fingerprint, out)
  return dict(out)
 
@@ -7057,34 +7264,70 @@ def _hg_app_fplay(vid: str, quality: str = "") -> dict:
   return _hg_fplay_finalize(decodable[0], decodable, info)
  return {}
 
-def _hg_oracle_model_path() -> str:
- """LSPosed oracle 落盘的 App 播放模型（App 端 video_model 响应，每行一个 JSON）。"""
- for path in (
-  "/storage/emulated/0/hg_work/hg_model_out.json",
-  "/data/user/0/com.phoenix.read/files/hg_model_out.json",
- ):
-  try:
-   if os.path.isfile(path):
-    return path
-  except Exception:
-   continue
- return ""
+def _hg_oracle_model_paths(force: bool = False) -> list:
+ """枚举 oracle 落盘文件 -> [path]，按 mtime 新到旧。
 
-def _hg_oracle_models() -> dict:
- """读 oracle 落盘文件 -> {video_id: model}。
-
-    oracle 由 com.hgprobe 模块（LSposed）把 App 自己解析到的播放模型原样落盘：
-    {"status":10,"video_id":"v0...","url_expire":...,
-      "fallback_api":{"fallback_api":"https://vas-lf-x.snssdk.com/video/fplay/1/<hash>/<bid>?..."},
-      "video_list":[{"quality_type":40,"gear_des_key":"...|4:360p|...",
-                     "main_url":"https://...","video_meta":{...},
-                     "encrypt_info":{"kid":...,"spade_a":...,"encryption_method":"cenc-aes-ctr"}}]}
-    这里统一转成 spider 内部模型形状：每档清晰度一条，含 main_url/kid/spade_a/definition。
+    2026-11-24 改造：不再写死路径。App 私有 files/ 与 root 导出目录里
+    凡是 hg_model_out*.json 都算（LSPosed 模块会按场景写多份：
+    hg_model_out.json / _latest / _M / _K / ...），全部参与合并。
+    发现结果按 _HG_APP_CACHE_DISC_TTL 缓存：FUSE 上一次全量 listdir 约 0.3s，
+    播放链路一集要查好几次，不缓存会被这步白拖掉。
     """
+ now = time.time()
+ cached = _HG_APP_CACHE_DISC.get("oracle")
+ if not force and cached and now - cached[0] < _HG_APP_CACHE_DISC_TTL:
+  return cached[1]
+ names: list = []
+ for root in _HG_APP_DATA_ROOTS:
+  base = os.path.join(root, "files")
+  for name in _hg_root_listdir(base):
+   if name.startswith("hg_model_out") and name.endswith(".json"):
+    names.append(os.path.join(base, name))
+ for base in _HG_APP_CACHE_EXPORT_DIRS:
+  for name in _hg_root_listdir(base):
+   if name.startswith("hg_model_out") and name.endswith(".json"):
+    names.append(os.path.join(base, name))
+ names = _hg_dedupe_paths(names)
+ if not names:
+  _HG_APP_CACHE_DISC["oracle"] = (now, [])
+  return []
+ stamped = []
+ for path in names:
+  mtime = -1.0
+  try:
+   mtime = os.stat(path).st_mtime
+  except Exception:
+   rc, out = _hg_root_run(["su", "-c", "stat -c " + "%Y" + " " + path], 10)
+   if rc == 0 and out:
+    try:
+     mtime = float(out.decode("utf-8", "replace").strip().splitlines()[-1])
+    except Exception:
+     mtime = -1.0
+  stamped.append((mtime, path))
+ stamped.sort(key=lambda item: (-item[0], item[1]))
+ result = [path for _mtime, path in stamped]
+ _HG_APP_CACHE_DISC["oracle"] = (now, result)
+ return result
+
+def _hg_oracle_model_path() -> str:
+ """LSPosed oracle 落盘的 App 播放模型（每行一个 JSON）——取 mtime 最新的那份。"""
+ paths = _hg_oracle_model_paths()
+ return paths[0] if paths else ""
+
+def _hg_oracle_fingerprint(paths: list) -> tuple:
+ """oracle 文件集指纹（路径 + 大小 + mtime），用于进程内解析缓存。"""
+ items = []
+ for path in paths:
+  try:
+   stat = os.stat(path)
+   items.append((path, stat.st_size, int(stat.st_mtime)))
+  except Exception:
+   items.append((path, -1, -1))
+ return tuple(items)
+
+def _hg_oracle_parse_file(path: str) -> dict:
+ """解析单个 oracle 文件 -> {video_id: model}。"""
  out: dict = {}
- path = _hg_oracle_model_path()
- if not path:
-  return out
  try:
   with open(path, "r", encoding="utf-8", errors="replace") as fh:
    lines = fh.read().splitlines()
@@ -7104,6 +7347,8 @@ def _hg_oracle_models() -> dict:
   if not isinstance(video_list, list) or not video_list:
    continue
   video_id = _text(data.get("video_id"))
+  if not video_id:
+   continue
   rows = []
   for entry in video_list:
    if not isinstance(entry, Mapping):
@@ -7136,13 +7381,50 @@ def _hg_oracle_models() -> dict:
   fallback = data.get("fallback_api")
   if isinstance(fallback, Mapping):
    fallback = fallback.get("fallback_api")
+  expire = int(data.get("url_expire") or 0)
+  previous = out.get(video_id)
+  if previous is not None and int(previous.get("url_expire") or 0) >= expire:
+   continue
   out[video_id] = {
    "video_id": video_id,
-   "url_expire": int(data.get("url_expire") or 0),
+   "url_expire": expire,
    "fallback_api": _text(fallback),
    "rows": rows,
   }
  return out
+
+# oracle 解析缓存：文件集指纹不变就复用（8 个文件全读一遍约几十毫秒）。
+_HG_ORACLE_MODELS_CACHE: dict = {}
+
+def _hg_oracle_models() -> dict:
+ """读 oracle 落盘文件 -> {video_id: model}。
+
+    oracle 由 com.hgprobe 模块（LSposed）把 App 自己解析到的播放模型原样落盘：
+    {"status":10,"video_id":"v0...","url_expire":...,
+      "fallback_api":{"fallback_api":"https://vas-lf-x.snssdk.com/video/fplay/1/<hash>/<bid>?..."},
+      "video_list":[{"quality_type":40,"gear_des_key":"...|4:360p|...",
+                     "main_url":"https://...","video_meta":{...},
+                     "encrypt_info":{"kid":...,"spade_a":...,"encryption_method":"cenc-aes-ctr"}}]}
+    这里统一转成 spider 内部模型形状：每档清晰度一条，含 main_url/kid/spade_a/definition。
+    2026-11-24 改造：运行时枚举全部 oracle 文件并合并（同 video_id 取 url_expire 大的），
+    路径不再写死。
+    """
+ paths = _hg_oracle_model_paths()
+ if not paths:
+  return {}
+ fingerprint = _hg_oracle_fingerprint(paths)
+ cached = _HG_ORACLE_MODELS_CACHE.get("set")
+ if cached is not None and cached[0] == fingerprint:
+  return dict(cached[1])
+ out: dict = {}
+ for path in paths:
+  for video_id, model in _hg_oracle_parse_file(path).items():
+   previous = out.get(video_id)
+   if previous is not None and int(previous.get("url_expire") or 0) >= int(model.get("url_expire") or 0):
+    continue
+   out[video_id] = model
+ _HG_ORACLE_MODELS_CACHE["set"] = (fingerprint, out)
+ return dict(out)
 
 def _hg_oracle_bid_for_vid(vid: str) -> str:
  """把 spider 的数字 vid 映射到 App 侧 fplay bid（v0...）。
