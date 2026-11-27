@@ -445,8 +445,6 @@ https://cdn8.163189.xyz/live/lhkt/stream.m3u8$LR•IPV4
 https://cdn8.163189.xyz/live/lhyp/stream.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="龙华日韩" tvg-name="龙华日韩" group-title="港澳台",龙华日韩
 https://cdn8.163189.xyz/live/lhrh/stream.m3u8$LR•IPV4
-#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="港澳台",中视
-https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="凤凰卫视中文台" tvg-name="凤凰卫视中文台" group-title="港澳台",凤凰卫视中文台
 http://119.125.131.84:9901/tsfile/live/1036_1.m3u8?key=txiptv&playlive=1&down=1$LR•IPV4•3『线路1』
 #EXTINF:-1 tvg-id="凤凰卫视中文台" tvg-name="凤凰卫视中文台" group-title="港澳台",凤凰卫视中文台
@@ -1207,6 +1205,8 @@ https://rundle.tv/proxy5.php?src=https://thor1.syndula001.cfd/h1/usergendx172s9r
 http://tvsen7.aynascope.net/hbo/index.m3u8$LR•IPV4•20『线路19』
 #EXTINF:-1 tvg-id="HBO" tvg-name="HBO" group-title="专享源🅰️",HBO
 http://tvsen7.aynascope.net/hbo2/index.m3u8$LR•IPV4•20『线路20』
+#EXTINF:-1 tvg-id="中视" tvg-name="中视" group-title="台湾台📶",中视HD
+https://raw.githubusercontent.com/ChiSheng9/iptv/master/TV09.m3u8$LR•IPV4
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
 http://37.49.224.5/stream/12/index.m3u8$LR•IPV4•32『线路1』
 #EXTINF:-1 tvg-id="HISTORY" tvg-name="HISTORY" group-title="台湾台📶",HISTORY
